@@ -7,28 +7,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { ad, soyad, email, kategori, urunGrubu, parcalar } = req.body;
+    const { firmaAdi, ad, soyad, email, telefon, adres, sektor, uretimGrubu, urunler } = req.body;
 
-    if (!ad || !soyad || !email || !kategori || !urunGrubu || !parcalar || parcalar.length === 0) {
+    // Validate required fields
+    if (!firmaAdi || !ad || !soyad || !email || !telefon || !adres || !sektor || !uretimGrubu || !urunler || urunler.length === 0) {
       return res.status(400).json({ error: 'Eksik bilgi' });
     }
 
     const { sheets, spreadsheetId } = await getGoogleSheets();
-    
+
+    // Save to "Response" sheet with all fields
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: 'Customers!A:G',
+      range: 'Response!A:I', // Changed from 'Customers' to 'Response'
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [
           [
-            ad,
-            soyad,
-            email,
-            kategori,
-            urunGrubu,
-            parcalar.join(', '),
-            new Date().toLocaleString('tr-TR'),
+            new Date().toLocaleString('tr-TR'), // Tarih (Date)
+            firmaAdi,                            // Firma Adı
+            ad,                                  // Ad
+            soyad,                               // Soyad
+            email,                               // Email
+            telefon,                             // Telefon
+            adres,                               // Adres
+            sektor,                              // Sektör
+            uretimGrubu,                         // Üretim Grubu
+            urunler.join(', '),                  // Ürünler (comma-separated)
           ],
         ],
       },
