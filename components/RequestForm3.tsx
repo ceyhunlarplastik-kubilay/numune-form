@@ -21,6 +21,10 @@ import {
 } from "@/components/multi-step-viewer";
 import { MultiStepFormProvider } from "@/hooks/use-multi-step-viewer";
 
+import { SectorFormSection } from "@/components/form3/SectorFormSection";
+import { ProductionGroupFormSection } from "@/components/form3/ProductionGroupFormSection";
+import { ProductsFormSection } from "@/components/form3/ProductsFormSection";
+
 // Form şeması
 const formSchema = z.object({
   // Bölüm 1: Sektör
@@ -48,7 +52,7 @@ type OptionsData = {
   [key: string]: string[]; // Anahtar: "Sektor__UretimGrubu", Değer: Ürün listesi
 };
 
-export default function RequestForm() {
+export default function RequestForm3() {
   const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -146,198 +150,29 @@ export default function RequestForm() {
     {
       // Bölüm 1: Sektör seçimi
       fields: ["sektor"],
-      component: (
-        <>
-          <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-            Sektör Seçimi
-          </h2>
-          <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-            Lütfen ilgilendiğiniz sektörü seçiniz.
-          </p>
-
-          <Controller
-            name="sektor"
-            control={form.control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid} className="gap-1">
-                <FieldLabel htmlFor="sektor">Sektör *</FieldLabel>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                  {sektorList.map((sektor) => (
-                    <label
-                      key={sektor}
-                      className={`
-                        flex items-center justify-center p-4 border rounded-lg cursor-pointer transition-all
-                        ${
-                          field.value === sektor
-                            ? "border-primary bg-primary/5"
-                            : "border-gray-200 hover:border-gray-300"
-                        }
-                      `}
-                    >
-                      <input
-                        type="radio"
-                        value={sektor}
-                        checked={field.value === sektor}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        className="sr-only"
-                      />
-                      <div className="flex flex-col items-center gap-2">
-                        <div
-                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center
-                          ${
-                            field.value === sektor
-                              ? "border-primary bg-primary"
-                              : "border-gray-300"
-                          }`}
-                        >
-                          {field.value === sektor && (
-                            <div className="w-3 h-3 rounded-full bg-white" />
-                          )}
-                        </div>
-                        <span className="font-medium">{sektor}</span>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-              </Field>
-            )}
-          />
-        </>
-      ),
+      component: <SectorFormSection form={form} sektorList={sektorList} />,
     },
     {
       // Bölüm 2: Üretim grubu seçimi
       fields: ["uretimGrubu"],
       component: (
-        <>
-          <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-            Üretim Grubu Seçimi
-          </h2>
-          <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-            Lütfen ilgilendiğiniz üretim grubunu seçiniz.
-          </p>
-
-          <Controller
-            name="uretimGrubu"
-            control={form.control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid} className="gap-1">
-                <FieldLabel htmlFor="uretimGrubu">Üretim Grubu *</FieldLabel>
-                {selectedSektor ? (
-                  <div className="grid grid-cols-1 gap-3 mt-2">
-                    {uretimGrubuList.map((grup) => (
-                      <label
-                        key={grup}
-                        className={`
-                          flex items-center p-4 border rounded-lg cursor-pointer transition-all
-                          ${
-                            field.value === grup
-                              ? "border-primary bg-primary/5"
-                              : "border-gray-200 hover:border-gray-300"
-                          }
-                        `}
-                      >
-                        <input
-                          type="radio"
-                          value={grup}
-                          checked={field.value === grup}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          className="mr-3"
-                        />
-                        <span className="font-medium">{grup}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-sm">
-                    Lütfen önce bir sektör seçiniz.
-                  </p>
-                )}
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-              </Field>
-            )}
-          />
-        </>
+        <ProductionGroupFormSection
+          form={form}
+          productionGroupList={uretimGrubuList}
+          selectedSektor={selectedSektor}
+        />
       ),
     },
     {
       // Bölüm 3: Ürün seçimi (çoklu)
       fields: ["urunler"],
       component: (
-        <>
-          <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-            Ürün Seçimi
-          </h2>
-          <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-            Lütfen numune talep etmek istediğiniz ürünleri seçiniz.
-          </p>
-
-          <Controller
-            name="urunler"
-            control={form.control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid} className="gap-1">
-                <FieldLabel>Ürünler *</FieldLabel>
-                {selectedSektor && selectedUretimGrubu ? (
-                  <div className="space-y-2 mt-2 max-h-[400px] overflow-y-auto p-2">
-                    {urunlerList.length > 0 ? (
-                      urunlerList.map((urun) => (
-                        <label
-                          key={urun}
-                          className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            value={urun}
-                            checked={field.value?.includes(urun)}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
-                              const currentValues = field.value || [];
-                              if (checked) {
-                                field.onChange([...currentValues, urun]);
-                              } else {
-                                field.onChange(
-                                  currentValues.filter((val) => val !== urun)
-                                );
-                              }
-                            }}
-                            className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                          />
-                          <div className="flex-1">
-                            <span className="font-medium">{urun}</span>
-                          </div>
-                        </label>
-                      ))
-                    ) : (
-                      <p className="text-muted-foreground text-sm">
-                        Bu üretim grubu için ürün bulunamadı.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-sm">
-                    Lütfen önce sektör ve üretim grubu seçiniz.
-                  </p>
-                )}
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-                {field.value && field.value.length > 0 && (
-                  <div className="mt-3 p-3 bg-primary/5 rounded-lg">
-                    <p className="text-sm font-medium">
-                      Seçilen ürün sayısı: {field.value.length}
-                    </p>
-                  </div>
-                )}
-              </Field>
-            )}
-          />
-        </>
+        <ProductsFormSection
+          form={form}
+          selectedProductiongroup={selectedUretimGrubu}
+          selectedSector={selectedSektor}
+          productList={urunlerList}
+        />
       ),
     },
     {
@@ -554,7 +389,7 @@ export default function RequestForm() {
     <div>
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col p-3 md:p-6 lg:p-8 w-full min-w-full mx-auto rounded-lg max-w-5xl gap-2 border bg-white dark:bg-zinc-800 shadow-lg"
+        className="flex flex-col p-3 md:p-6 lg:p-8 w-full min-w-full mx-auto rounded-lg max-w-7xl gap-2 border bg-white dark:bg-zinc-800 shadow-lg"
       >
         <MultiStepFormProvider
           stepsFields={stepsFields}
