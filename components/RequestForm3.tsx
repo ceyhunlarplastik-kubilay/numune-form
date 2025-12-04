@@ -5,13 +5,7 @@ import * as z from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, Controller } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  ChevronsUpDown,
-  X,
-} from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { Input } from "@/components/ui/input";
@@ -26,21 +20,6 @@ import {
   MultiStepFormContent,
 } from "@/components/multi-step-viewer";
 import { MultiStepFormProvider } from "@/hooks/use-multi-step-viewer";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 // Form şeması
 const formSchema = z.object({
@@ -72,8 +51,6 @@ type OptionsData = {
 export default function RequestForm() {
   const [success, setSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [openSektor, setOpenSektor] = useState(false);
-  const [openUretimGrubu, setOpenUretimGrubu] = useState(false);
 
   const form = useForm<Schema>({
     resolver: zodResolver(formSchema),
@@ -125,12 +102,6 @@ export default function RequestForm() {
     ...new Set(Object.keys(options).map((key) => key.split("__")[0])),
   ];
 
-  // Combobox için format
-  const sektorComboboxList = sektorList.map((sektor) => ({
-    value: sektor,
-    label: sektor,
-  }));
-
   // Seçilen sektöre ait üretim gruplarını oluştur
   const uretimGrubuList = [
     ...new Set(
@@ -139,12 +110,6 @@ export default function RequestForm() {
         .map((key) => key.split("__")[1])
     ),
   ];
-
-  // Combobox için format
-  const uretimGrubuComboboxList = uretimGrubuList.map((grup) => ({
-    value: grup,
-    label: grup,
-  }));
 
   // Seçilen sektör ve üretim grubuna ait ürünleri al
   const urunlerList =
@@ -179,7 +144,7 @@ export default function RequestForm() {
   // Form adımları
   const stepsFields = [
     {
-      // Bölüm 1: Sektör seçimi (Combobox)
+      // Bölüm 1: Sektör seçimi
       fields: ["sektor"],
       component: (
         <>
@@ -196,68 +161,44 @@ export default function RequestForm() {
             render={({ field, fieldState }) => (
               <Field data-invalid={fieldState.invalid} className="gap-1">
                 <FieldLabel htmlFor="sektor">Sektör *</FieldLabel>
-                <Popover open={openSektor} onOpenChange={setOpenSektor}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openSektor}
-                      className={cn(
-                        "w-full justify-between",
-                        fieldState.invalid && "border-red-500"
-                      )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                  {sektorList.map((sektor) => (
+                    <label
+                      key={sektor}
+                      className={`
+                        flex items-center justify-center p-4 border rounded-lg cursor-pointer transition-all
+                        ${
+                          field.value === sektor
+                            ? "border-primary bg-primary/5"
+                            : "border-gray-200 hover:border-gray-300"
+                        }
+                      `}
                     >
-                      {field.value
-                        ? sektorComboboxList.find(
-                            (sektor) => sektor.value === field.value
-                          )?.label
-                        : "Sektör seçiniz..."}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent
-                    className="w-full p-0"
-                    style={{ width: "var(--radix-popover-trigger-width)" }}
-                    align="start"
-                  >
-                    <Command className="w-full">
-                      <CommandInput
-                        placeholder="Sektör ara..."
-                        className="h-9"
+                      <input
+                        type="radio"
+                        value={sektor}
+                        checked={field.value === sektor}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        className="sr-only"
                       />
-                      <CommandList className="max-h-[300px]">
-                        <CommandEmpty>Sektör bulunamadı.</CommandEmpty>
-                        <CommandGroup className="w-full">
-                          {sektorComboboxList.map((sektor) => (
-                            <CommandItem
-                              key={sektor.value}
-                              value={sektor.value}
-                              onSelect={(currentValue) => {
-                                field.onChange(
-                                  currentValue === field.value
-                                    ? ""
-                                    : currentValue
-                                );
-                                setOpenSektor(false);
-                              }}
-                              className="w-full truncate"
-                            >
-                              <Check
-                                className={cn(
-                                  "mr-2 h-4 w-4 flex-shrink-0",
-                                  field.value === sektor.value
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                                )}
-                              />
-                              <span className="truncate">{sektor.label}</span>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                      <div className="flex flex-col items-center gap-2">
+                        <div
+                          className={`w-6 h-6 rounded-full border-2 flex items-center justify-center
+                          ${
+                            field.value === sektor
+                              ? "border-primary bg-primary"
+                              : "border-gray-300"
+                          }`}
+                        >
+                          {field.value === sektor && (
+                            <div className="w-3 h-3 rounded-full bg-white" />
+                          )}
+                        </div>
+                        <span className="font-medium">{sektor}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
                 {fieldState.invalid && (
                   <FieldError errors={[fieldState.error]} />
                 )}
@@ -268,7 +209,7 @@ export default function RequestForm() {
       ),
     },
     {
-      // Bölüm 2: Üretim grubu seçimi (Combobox)
+      // Bölüm 2: Üretim grubu seçimi
       fields: ["uretimGrubu"],
       component: (
         <>
@@ -286,74 +227,34 @@ export default function RequestForm() {
               <Field data-invalid={fieldState.invalid} className="gap-1">
                 <FieldLabel htmlFor="uretimGrubu">Üretim Grubu *</FieldLabel>
                 {selectedSektor ? (
-                  <Popover
-                    open={openUretimGrubu}
-                    onOpenChange={setOpenUretimGrubu}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={openUretimGrubu}
-                        className={cn(
-                          "w-full justify-between",
-                          fieldState.invalid && "border-red-500"
-                        )}
-                        disabled={!selectedSektor}
+                  <div className="grid grid-cols-1 gap-3 mt-2">
+                    {uretimGrubuList.map((grup) => (
+                      <label
+                        key={grup}
+                        className={`
+                          flex items-center p-4 border rounded-lg cursor-pointer transition-all
+                          ${
+                            field.value === grup
+                              ? "border-primary bg-primary/5"
+                              : "border-gray-200 hover:border-gray-300"
+                          }
+                        `}
                       >
-                        {field.value
-                          ? uretimGrubuComboboxList.find(
-                              (grup) => grup.value === field.value
-                            )?.label
-                          : "Üretim grubu seçiniz..."}
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="w-full p-0"
-                      style={{ width: "var(--radix-popover-trigger-width)" }}
-                      align="start"
-                    >
-                      <Command>
-                        <CommandInput placeholder="Üretim grubu ara..." />
-                        <CommandList>
-                          <CommandEmpty>Üretim grubu bulunamadı.</CommandEmpty>
-                          <CommandGroup>
-                            {uretimGrubuComboboxList.map((grup) => (
-                              <CommandItem
-                                key={grup.value}
-                                value={grup.value}
-                                onSelect={(currentValue) => {
-                                  field.onChange(
-                                    currentValue === field.value
-                                      ? ""
-                                      : currentValue
-                                  );
-                                  setOpenUretimGrubu(false);
-                                }}
-                              >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    field.value === grup.value
-                                      ? "opacity-100"
-                                      : "opacity-0"
-                                  )}
-                                />
-                                {grup.label}
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
-                ) : (
-                  <div className="p-4 border border-dashed rounded-lg text-center">
-                    <p className="text-muted-foreground text-sm">
-                      Lütfen önce bir sektör seçiniz.
-                    </p>
+                        <input
+                          type="radio"
+                          value={grup}
+                          checked={field.value === grup}
+                          onChange={(e) => field.onChange(e.target.value)}
+                          className="mr-3"
+                        />
+                        <span className="font-medium">{grup}</span>
+                      </label>
+                    ))}
                   </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    Lütfen önce bir sektör seçiniz.
+                  </p>
                 )}
                 {fieldState.invalid && (
                   <FieldError errors={[fieldState.error]} />
@@ -373,11 +274,7 @@ export default function RequestForm() {
             Ürün Seçimi
           </h2>
           <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-            Seçtiğiniz plastik bağlantı numuneleri, üretim süreçlerinizde
-            kullanım için uygunluğunu test etmeniz amacıyla ücretsiz olarak
-            adresinize gönderilecektir. Kalite standartlarımızı ve ürün
-            performansını değerlendirmeniz için istediğiniz ürünleri aşağıdaki"
-            listeden seçebilirsiniz.
+            Lütfen numune talep etmek istediğiniz ürünleri seçiniz.
           </p>
 
           <Controller
@@ -417,19 +314,15 @@ export default function RequestForm() {
                         </label>
                       ))
                     ) : (
-                      <div className="p-4 border border-dashed rounded-lg text-center">
-                        <p className="text-muted-foreground text-sm">
-                          Bu üretim grubu için ürün bulunamadı.
-                        </p>
-                      </div>
+                      <p className="text-muted-foreground text-sm">
+                        Bu üretim grubu için ürün bulunamadı.
+                      </p>
                     )}
                   </div>
                 ) : (
-                  <div className="p-4 border border-dashed rounded-lg text-center">
-                    <p className="text-muted-foreground text-sm">
-                      Lütfen önce sektör ve üretim grubu seçiniz.
-                    </p>
-                  </div>
+                  <p className="text-muted-foreground text-sm">
+                    Lütfen önce sektör ve üretim grubu seçiniz.
+                  </p>
                 )}
                 {fieldState.invalid && (
                   <FieldError errors={[fieldState.error]} />
@@ -439,23 +332,6 @@ export default function RequestForm() {
                     <p className="text-sm font-medium">
                       Seçilen ürün sayısı: {field.value.length}
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {field.value.map((urun) => (
-                        <button
-                          key={urun}
-                          type="button"
-                          onClick={() => {
-                            field.onChange(
-                              (field.value || []).filter((val) => val !== urun)
-                            );
-                          }}
-                          className="group inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary text-xs rounded-full hover:bg-primary/20 transition-colors"
-                        >
-                          <span>{urun}</span>
-                          <X className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 )}
               </Field>

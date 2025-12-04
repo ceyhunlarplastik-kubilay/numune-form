@@ -1,5 +1,4 @@
 import RequestForm from "@/components/RequestForm";
-import RequestForm2 from "@/components/RequestForm2";
 import Image from "next/image";
 
 export default function Home() {
@@ -59,7 +58,7 @@ export default function Home() {
       {/* Form Bileşeni */}
       <div className="w-full max-w-md md:max-w-lg lg:max-w-xl px-4">
         {/* <RequestForm /> */}
-        <RequestForm2 />
+        <RequestForm />
       </div>
 
       {/* Alt Bilgi */}
