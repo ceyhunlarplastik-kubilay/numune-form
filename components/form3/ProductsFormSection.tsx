@@ -48,7 +48,9 @@ export const ProductsFormSection = ({
                             field.onChange([...currentValues, urun]);
                           } else {
                             field.onChange(
-                              currentValues.filter((val) => val !== urun)
+                              currentValues.filter(
+                                (val: string) => val !== urun
+                              )
                             );
                           }
                         }}
