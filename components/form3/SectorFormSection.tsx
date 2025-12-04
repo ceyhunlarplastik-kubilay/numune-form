@@ -108,6 +108,7 @@ export const SectorFormSection = ({
 import { Controller } from "react-hook-form";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef } from "react";
 
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import {
@@ -132,6 +133,7 @@ export const SectorFormSection = ({
   sektorList,
 }: SectorFormSectionProps) => {
   const OTHER_SECTOR_NAME = "Diğerleri";
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   // API'dan gelen sektör listesini sectors array'indeki verilerle eşleştir
   const sectorData = sektorList
@@ -144,8 +146,57 @@ export const SectorFormSection = ({
     })
     .filter((s) => s.image);
 
+  // Seçim yapıldığında smooth scroll
+  const selectedSector = form.watch("sektor");
+
+  useEffect(() => {
+    if (selectedSector && sectionRef.current) {
+      // Kısa bir gecikme ile scroll yap (animasyon için)
+      setTimeout(() => {
+        // Section'ın altına scroll yap - daha agresif
+        const sectionBottom =
+          sectionRef.current?.getBoundingClientRect().bottom || 0;
+        const windowHeight = window.innerHeight;
+
+        // Scroll miktarını hesapla
+        let scrollAmount = 0;
+        if (sectionBottom > windowHeight) {
+          scrollAmount = sectionBottom - windowHeight + 200; // 200px ekstra boşluk
+        } else {
+          scrollAmount = 400; // Section görünüyorsa, biraz daha aşağı kaydır
+        }
+
+        // Custom easing scroll animasyonu (ease-in-out)
+        const startPosition = window.pageYOffset;
+        const targetPosition = startPosition + scrollAmount;
+        const duration = 800; // 800ms animasyon
+        let startTime: number | null = null;
+
+        // Easing function: yavaş başla, hızlan, yavaşla
+        const easeInOutCubic = (t: number): number => {
+          return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        };
+
+        const animation = (currentTime: number) => {
+          if (startTime === null) startTime = currentTime;
+          const timeElapsed = currentTime - startTime;
+          const progress = Math.min(timeElapsed / duration, 1);
+
+          const ease = easeInOutCubic(progress);
+          window.scrollTo(0, startPosition + scrollAmount * ease);
+
+          if (progress < 1) {
+            requestAnimationFrame(animation);
+          }
+        };
+
+        requestAnimationFrame(animation);
+      }, 400);
+    }
+  }, [selectedSector]);
+
   return (
-    <>
+    <div ref={sectionRef}>
       <div className="space-y-2 mb-6">
         <h2 className="text-2xl font-bold tracking-tight">Sektör Seçimi</h2>
         <p className="text-sm text-muted-foreground">
@@ -344,6 +395,6 @@ export const SectorFormSection = ({
           </Field>
         )}
       />
-    </>
+    </div>
   );
 };
