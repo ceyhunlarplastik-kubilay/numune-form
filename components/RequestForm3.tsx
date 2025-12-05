@@ -24,6 +24,9 @@ import { MultiStepFormProvider } from "@/hooks/use-multi-step-viewer";
 import { SectorFormSection } from "@/components/form3/SectorFormSection";
 import { ProductionGroupFormSection } from "@/components/form3/ProductionGroupFormSection";
 import { ProductsFormSection } from "@/components/form3/ProductsFormSection";
+import { PreviewFormSection } from "@/components/form3/PreviewFormSection";
+import { PhoneInput } from "@/components/inputs/phone-input";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 // Form şeması
 const formSchema = z.object({
@@ -33,16 +36,23 @@ const formSchema = z.object({
   // Bölüm 2: Üretim grubu
   uretimGrubu: z.string().min(1, "Üretim grubu seçiniz"),
 
-  // Bölüm 3: Ürünler (çoklu seçim)
+  // Bölüm 3: Ürünler
   urunler: z.array(z.string()).min(1, "En az bir ürün seçiniz"),
 
   // Bölüm 4: İletişim bilgileri
   firmaAdi: z.string().min(2, "Firma adı en az 2 karakter olmalıdır"),
-  ad: z.string().min(2, "Ad en az 2 karakter olmalıdır"),
-  soyad: z.string().min(2, "Soyad en az 2 karakter olmalıdır"),
-  email: z.string().email("Geçerli bir email adresi giriniz"),
-  telefon: z.string().min(10, "Geçerli bir telefon numarası giriniz"),
-  adres: z.string().min(5, "Adres en az 5 karakter olmalıdır"),
+
+  ad: z.string().optional(),
+  soyad: z.string().optional(),
+  email: z.string().email("Geçerli bir email adresi giriniz").optional(),
+
+  telefon: z
+    .string()
+    .min(1, "Telefon numarası gereklidir")
+    .max(13, "Telefon numarası en fazla 10 karakter olmalıdır")
+    .refine(isValidPhoneNumber, { message: "Geçersiz telefon numarası" }),
+
+  adres: z.string(),
 });
 
 type Schema = z.infer<typeof formSchema>;
@@ -107,18 +117,27 @@ export default function RequestForm3() {
   ];
 
   // Seçilen sektöre ait üretim gruplarını oluştur
-  const uretimGrubuList = [
-    ...new Set(
-      Object.keys(options)
-        .filter((key) => key.split("__")[0] === selectedSektor)
-        .map((key) => key.split("__")[1])
-    ),
-  ];
+  const uretimGrubuList =
+    selectedSektor === "Diğerleri"
+      ? [
+          ...new Set(Object.keys(options).map((key) => key.split("__")[1])),
+        ].sort()
+      : [
+          ...new Set(
+            Object.keys(options)
+              .filter((key) => key.split("__")[0] === selectedSektor)
+              .map((key) => key.split("__")[1])
+          ),
+        ];
 
   // Seçilen sektör ve üretim grubuna ait ürünleri al
   const urunlerList =
     selectedSektor && selectedUretimGrubu
-      ? options[`${selectedSektor}__${selectedUretimGrubu}`] || []
+      ? selectedSektor === "Diğerleri"
+        ? Object.keys(options)
+            .filter((key) => key.split("__")[1] === selectedUretimGrubu)
+            .flatMap((key) => options[key])
+        : options[`${selectedSektor}__${selectedUretimGrubu}`] || []
       : [];
 
   const handleSubmit = form.handleSubmit(async (formData) => {
@@ -180,12 +199,14 @@ export default function RequestForm3() {
       fields: ["firmaAdi", "ad", "soyad", "email", "telefon", "adres"],
       component: (
         <>
-          <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-            İletişim Bilgileri
-          </h2>
-          <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-            Lütfen iletişim bilgilerinizi giriniz.
-          </p>
+          <div className="space-y-2 mb-6 text-center">
+            <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
+              İletişim Bilgileri
+            </h2>
+            <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
+              Lütfen iletişim bilgilerinizi giriniz.
+            </p>
+          </div>
 
           <div className="space-y-4">
             <Controller
@@ -214,7 +235,7 @@ export default function RequestForm3() {
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid} className="gap-1">
-                    <FieldLabel htmlFor="ad">Ad *</FieldLabel>
+                    <FieldLabel htmlFor="ad">Ad</FieldLabel>
                     <Input
                       {...field}
                       id="ad"
@@ -234,7 +255,7 @@ export default function RequestForm3() {
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid} className="gap-1">
-                    <FieldLabel htmlFor="soyad">Soyad *</FieldLabel>
+                    <FieldLabel htmlFor="soyad">Soyad</FieldLabel>
                     <Input
                       {...field}
                       id="soyad"
@@ -255,7 +276,7 @@ export default function RequestForm3() {
               control={form.control}
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid} className="gap-1">
-                  <FieldLabel htmlFor="email">Email *</FieldLabel>
+                  <FieldLabel htmlFor="email">Email</FieldLabel>
                   <Input
                     {...field}
                     id="email"
@@ -276,12 +297,11 @@ export default function RequestForm3() {
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid} className="gap-1">
                   <FieldLabel htmlFor="telefon">Telefon *</FieldLabel>
-                  <Input
+                  <PhoneInput
                     {...field}
                     id="telefon"
-                    type="tel"
-                    placeholder="5XX XXX XX XX"
-                    aria-invalid={fieldState.invalid}
+                    placeholder="Telefon numarası"
+                    defaultCountry="TR"
                   />
                   {fieldState.invalid && (
                     <FieldError errors={[fieldState.error]} />
@@ -295,7 +315,7 @@ export default function RequestForm3() {
               control={form.control}
               render={({ field, fieldState }) => (
                 <Field data-invalid={fieldState.invalid} className="gap-1">
-                  <FieldLabel htmlFor="adres">Adres *</FieldLabel>
+                  <FieldLabel htmlFor="adres">Adres</FieldLabel>
                   <textarea
                     {...field}
                     id="adres"
@@ -313,6 +333,11 @@ export default function RequestForm3() {
           </div>
         </>
       ),
+    },
+    {
+      // Bölüm 5: Önizleme ve Onay
+      fields: [], // Bu adımda validasyon yok, sadece görüntüleme
+      component: <PreviewFormSection form={form} />,
     },
   ];
 

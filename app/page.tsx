@@ -41,9 +41,9 @@ export default function Home() {
       </div>
 
       {/* Açıklama Metni */}
-      <div className="w-full max-w-md md:max-w-lg mb-6 md:mb-8 px-4">
+      {/* <div className="w-full max-w-md md:max-w-lg mb-6 md:mb-8 px-4">
         <div className="relative">
-          {/* Dekoratif altın çizgi */}
+          
           <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 w-20 h-px bg-gradient-to-r from-transparent via-[#ccb36e] to-transparent"></div>
 
           <p className="text-sm md:text-base text-zinc-600 dark:text-zinc-300 text-center leading-relaxed font-light pt-4">
@@ -51,10 +51,9 @@ export default function Home() {
             size özel numunelerimizi adresinize gönderelim.
           </p>
 
-          {/* Dekoratif nokta */}
-          {/* <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-[#ccb36e] rounded-full"></div> */}
+          <div className="absolute -bottom-3 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-[#ccb36e] rounded-full"></div>
         </div>
-      </div>
+      </div> */}
 
       {/* Form Bileşeni */}
       <div className="w-full max-w-7xl px-4">

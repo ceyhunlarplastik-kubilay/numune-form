@@ -16,19 +16,21 @@ export const ProductsFormSection = ({
 }) => {
   return (
     <>
-      <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-        Ürün Seçimi
-      </h2>
-      <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-        Lütfen numune talep etmek istediğiniz ürünleri seçiniz.
-      </p>
+      <div className="space-y-2 text-center">
+        <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
+          Ürün Seçimi
+        </h2>
+        <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
+          Lütfen numune talep etmek istediğiniz ürünleri seçiniz.
+        </p>
+      </div>
 
       <Controller
         name="urunler"
         control={form.control}
         render={({ field, fieldState }) => (
           <Field data-invalid={fieldState.invalid} className="gap-1">
-            <FieldLabel>Ürünler *</FieldLabel>
+            {/* <FieldLabel>Ürünler *</FieldLabel> */}
             {selectedSector && selectedProductiongroup ? (
               <div className="space-y-2 mt-2 max-h-[400px] overflow-y-auto p-2">
                 {productList.length > 0 ? (

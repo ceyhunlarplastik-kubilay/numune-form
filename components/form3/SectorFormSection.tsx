@@ -1,109 +1,3 @@
-/* "use client";
-import { Controller } from "react-hook-form";
-import Image from "next/image";
-
-import { Field, FieldLabel, FieldError } from "@/components/ui/field";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle2 } from "lucide-react";
-
-export const SectorFormSection = ({
-  form,
-  sektorList,
-}: {
-  form: any;
-  sektorList: string[];
-}) => {
-  return (
-    <>
-      <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-        Sektör Seçimi
-      </h2>
-      <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-        Lütfen ilgilendiğiniz sektörü seçiniz.
-      </p>
-
-      <Controller
-        name="sektor"
-        control={form.control}
-        render={({ field, fieldState }) => (
-          <Field data-invalid={fieldState.invalid} className="gap-1">
-            <FieldLabel htmlFor="sektor">Sektör *</FieldLabel>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
-              {sektorList.map((sektor, index) => (
-                <Card
-                  key={index}
-                  className={`cursor-pointer transition-all hover:shadow-md ${
-                    field.value === sektor
-                      ? "border-primary bg-primary/5 shadow-sm"
-                      : "hover:border-gray-300"
-                  }`}
-                  onClick={() => field.onChange(sektor)}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="relative w-full h-60 mb-3 rounded-md overflow-hidden group">
-                      <Image
-                        src={
-                          (index / 2) % 2 === 0 ? "/gym.jpg" : "/furniture.jpg"
-                        }
-                        alt={sektor}
-                        fill
-                        className={`
-                          object-cover transition-all duration-300 ease-in-out 
-                          group-hover:scale-105
-                          ${
-                            !field.value // hiçbir seçim yoksa → renkli
-                              ? "grayscale-0"
-                              : field.value === sektor // seçili kart → renkli
-                              ? "grayscale-0"
-                              : "grayscale" // seçilmeyen → siyah-beyaz
-                          }
-                        `}
-                      />
-                    </div>
-
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg font-semibold">
-                        {sektor}
-                      </CardTitle>
-                      {field.value === sektor && (
-                        <Badge className="bg-primary">
-                          <CheckCircle2 className="w-3 h-3 mr-1" />
-                          Seçildi
-                        </Badge>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <input
-                      type="radio"
-                      value={sektor}
-                      checked={field.value === sektor}
-                      onChange={(e) => field.onChange(e.target.value)}
-                      className="sr-only"
-                    />
-                    <CardDescription>
-                      {sektor} sektörü için numune talep edin
-                    </CardDescription>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
-          </Field>
-        )}
-      />
-    </>
-  );
-};
- */
-
 "use client";
 import { Controller } from "react-hook-form";
 import Image from "next/image";
@@ -197,7 +91,7 @@ export const SectorFormSection = ({
 
   return (
     <div ref={sectionRef}>
-      <div className="space-y-2 mb-6">
+      <div className="space-y-2 mb-6 text-center">
         <h2 className="text-2xl font-bold tracking-tight">Sektör Seçimi</h2>
         <p className="text-sm text-muted-foreground">
           Lütfen ilgilendiğiniz sektörü seçiniz. Diğer sektörler için
@@ -210,7 +104,7 @@ export const SectorFormSection = ({
         control={form.control}
         render={({ field, fieldState }) => (
           <Field data-invalid={fieldState.invalid} className="space-y-3">
-            <FieldLabel className="text-base font-medium">Sektör *</FieldLabel>
+            {/* <FieldLabel className="text-base font-medium">Sektör *</FieldLabel> */}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Ana sektör kartları */}
