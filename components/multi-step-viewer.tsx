@@ -69,9 +69,7 @@ export const StepFields = () => {
 };
 
 export const FormFooter = ({ children }: { children: React.ReactNode }) => {
-  return (
-    <div className="flex justify-between mt-6 pt-4 border-t">{children}</div>
-  );
+  return <div className="flex justify-between mt-6">{children}</div>;
 };
 
 export const PreviousButton = ({
@@ -96,8 +94,8 @@ export const PreviousButton = ({
   );
 };
 
-export const NextButton = ({ children, className, ...props }: ButtonProps) => {
-  const { nextStep, isLastStep } = useMultiStepViewer();
+/* export const NextButton = ({ children, className, ...props }: ButtonProps) => {
+  const { nextStep, isLastStep, isFirstStep } = useMultiStepViewer();
 
   if (isLastStep) return null;
 
@@ -106,6 +104,27 @@ export const NextButton = ({ children, className, ...props }: ButtonProps) => {
       type="button"
       onClick={nextStep}
       className={cn("gap-2", className)}
+      {...props}
+    >
+      {children}
+    </Button>
+  );
+}; */
+
+export const NextButton = ({ children, className, ...props }: ButtonProps) => {
+  const { nextStep, isLastStep, isFirstStep } = useMultiStepViewer();
+
+  if (isLastStep) return null;
+
+  return (
+    <Button
+      type="button"
+      onClick={nextStep}
+      className={cn(
+        "gap-2",
+        isFirstStep && "mx-auto", // İlk adımda ortala
+        className
+      )}
       {...props}
     >
       {children}

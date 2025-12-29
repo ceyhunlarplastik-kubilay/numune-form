@@ -1,10 +1,11 @@
 "use client";
+
 import { Controller } from "react-hook-form";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef } from "react";
 
-import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import { Field, FieldError } from "@/components/ui/field";
 import {
   Card,
   CardContent,
@@ -13,282 +14,149 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, MoreHorizontal } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 
-import { sectors, getSectorImage } from "@/constants/sectors";
+import { FormSectionStickyWrapper } from "@/components/form3/form-section/FormSectionStickyWrapper";
+import { getSectorImage } from "@/constants/sectors";
 
 interface SectorFormSectionProps {
   form: any;
-  sektorList: string[];
+  sectors: { _id: string; name: string; image: string }[];
 }
 
 export const SectorFormSection = ({
   form,
-  sektorList,
+  sectors,
 }: SectorFormSectionProps) => {
-  const OTHER_SECTOR_NAME = "Diğerleri";
+  const OTHER_NAME = "Diğerleri";
   const sectionRef = useRef<HTMLDivElement>(null);
 
-  // API'dan gelen sektör listesini sectors array'indeki verilerle eşleştir
-  const sectorData = sektorList
-    .map((sectorName) => {
-      const sectorInfo = sectors.find((s) => s.name === sectorName);
-      return {
-        name: sectorName,
-        image: sectorInfo?.image || getSectorImage(sectorName),
-      };
-    })
-    .filter((s) => s.image);
+  // Normalize sectors
+  const sectorData = sectors
+    .map((s) => ({
+      id: s._id,
+      name: s.name,
+      image:
+        sectors.find((x) => x.name === s.name)?.image || getSectorImage(s.name),
+    }))
+    .filter((x) => !!x.image);
 
-  // Seçim yapıldığında smooth scroll
   const selectedSector = form.watch("sektor");
 
+  // Scroll down when a sector is selected
   useEffect(() => {
-    if (selectedSector && sectionRef.current) {
-      // Kısa bir gecikme ile scroll yap (animasyon için)
-      setTimeout(() => {
-        // Section'ın altına scroll yap - daha agresif
-        const sectionBottom =
-          sectionRef.current?.getBoundingClientRect().bottom || 0;
-        const windowHeight = window.innerHeight;
+    if (!selectedSector || !sectionRef.current) return;
 
-        // Scroll miktarını hesapla
-        let scrollAmount = 0;
-        if (sectionBottom > windowHeight) {
-          scrollAmount = sectionBottom - windowHeight + 200; // 200px ekstra boşluk
-        } else {
-          scrollAmount = 400; // Section görünüyorsa, biraz daha aşağı kaydır
-        }
+    const el = sectionRef.current;
 
-        // Custom easing scroll animasyonu (ease-in-out)
-        const startPosition = window.pageYOffset;
-        const targetPosition = startPosition + scrollAmount;
-        const duration = 800; // 800ms animasyon
-        let startTime: number | null = null;
+    setTimeout(() => {
+      const r = el.getBoundingClientRect();
+      const offset = r.bottom - window.innerHeight + 200;
 
-        // Easing function: yavaş başla, hızlan, yavaşla
-        const easeInOutCubic = (t: number): number => {
-          return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-        };
-
-        const animation = (currentTime: number) => {
-          if (startTime === null) startTime = currentTime;
-          const timeElapsed = currentTime - startTime;
-          const progress = Math.min(timeElapsed / duration, 1);
-
-          const ease = easeInOutCubic(progress);
-          window.scrollTo(0, startPosition + scrollAmount * ease);
-
-          if (progress < 1) {
-            requestAnimationFrame(animation);
-          }
-        };
-
-        requestAnimationFrame(animation);
-      }, 400);
-    }
+      window.scrollTo({
+        top: window.scrollY + Math.max(offset, 400),
+        behavior: "smooth",
+      });
+    }, 300);
   }, [selectedSector]);
 
   return (
-    <div ref={sectionRef}>
-      <div className="space-y-2 mb-6 text-center">
-        <h2 className="text-2xl font-bold tracking-tight">Sektör Seçimi</h2>
-        <p className="text-sm text-muted-foreground">
-          Lütfen ilgilendiğiniz sektörü seçiniz. Diğer sektörler için
-          "Diğerleri" seçeneğini kullanın.
-        </p>
-      </div>
+    <FormSectionStickyWrapper
+      title="Sektör Seçimi"
+      description="Lütfen ilgilendiğiniz sektörü seçiniz."
+    >
+      <div ref={sectionRef}>
+        <Controller
+          name="sektor"
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid} className="space-y-4">
+              {/* SEKTÖRLER GRID */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sectorData.map((sector) => {
+                  const isSelected = field.value === sector.id;
 
-      <Controller
-        name="sektor"
-        control={form.control}
-        render={({ field, fieldState }) => (
-          <Field data-invalid={fieldState.invalid} className="space-y-3">
-            {/* <FieldLabel className="text-base font-medium">Sektör *</FieldLabel> */}
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Ana sektör kartları */}
-              {sectorData.map((sector) => {
-                const isSelected = field.value === sector.name;
-
-                return (
-                  <Card
-                    key={sector.name}
-                    className={cn(
-                      "group cursor-pointer transition-all duration-300",
-                      "hover:shadow-md hover:border-primary/50",
-                      isSelected
-                        ? "border-primary bg-primary/5 shadow-sm ring-2 ring-primary/20"
-                        : "hover:border-gray-300"
-                    )}
-                    onClick={() => field.onChange(sector.name)}
-                  >
-                    <CardHeader className="pb-3">
-                      {/* Görsel Container */}
-                      <div className="relative w-full h-40 mb-3 rounded-md overflow-hidden">
-                        <Image
-                          src={sector.image}
-                          alt={sector.name}
-                          fill
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          className={cn(
-                            "object-cover transition-all duration-500",
-                            "group-hover:scale-105",
-                            isSelected
-                              ? "grayscale-0"
-                              : field.value && !isSelected
-                              ? "grayscale group-hover:grayscale-0"
-                              : "grayscale-0"
+                  return (
+                    <Card
+                      key={sector.id}
+                      className={cn(
+                        "cursor-pointer transition-all",
+                        "hover:shadow-md hover:border-primary/50",
+                        isSelected
+                          ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/30"
+                          : ""
+                      )}
+                      onClick={() => field.onChange(sector.id)}
+                    >
+                      <CardHeader>
+                        <div className="relative w-full h-40 rounded-md overflow-hidden">
+                          <Image
+                            src={sector.image}
+                            alt={sector.name}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          />
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
+                              <CheckCircle2 className="text-primary w-10 h-10" />
+                            </div>
                           )}
-                          priority={sector.name === "Mobilya"}
-                        />
+                        </div>
 
-                        {/* Seçim overlay */}
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-primary/10 backdrop-blur-[1px] flex items-center justify-center">
-                            <CheckCircle2 className="w-8 h-8 text-primary" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Başlık ve Badge */}
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-lg font-semibold">
+                        <CardTitle className="flex justify-between items-center">
                           {sector.name}
+                          {isSelected && <Badge>Seçildi</Badge>}
                         </CardTitle>
-                        {isSelected && (
-                          <Badge className="bg-primary hover:bg-primary/90">
-                            <CheckCircle2 className="w-3 h-3 mr-1" />
-                            Seçildi
-                          </Badge>
-                        )}
-                      </div>
-                    </CardHeader>
+                      </CardHeader>
 
-                    <CardContent className="pb-4">
-                      <input
-                        type="radio"
-                        value={sector.name}
-                        checked={isSelected}
-                        onChange={(e) => field.onChange(e.target.value)}
-                        className="sr-only"
+                      <CardContent>
+                        <CardDescription>
+                          {sector.name} sektörü için numune talep edin.
+                        </CardDescription>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+
+                {/* DİĞERLERİ */}
+                <Card
+                  key="other"
+                  className={cn(
+                    "cursor-pointer border-dashed border-2 transition-all",
+                    "hover:shadow-md hover:border-primary/50",
+                    field.value === "others"
+                      ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/30"
+                      : ""
+                  )}
+                  onClick={() => field.onChange("others")}
+                >
+                  <CardHeader>
+                    <div className="relative w-full h-40 rounded-md overflow-hidden">
+                      <Image
+                        src="/others.jpg"
+                        alt="Diğerleri"
+                        fill
+                        className="object-cover opacity-80"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       />
-                      <CardDescription className="line-clamp-2">
-                        {sector.name} sektörü için numune talep edin
-                      </CardDescription>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-
-              {/* Tek "Diğerleri" kartı */}
-              <Card
-                className={cn(
-                  "group cursor-pointer transition-all duration-300",
-                  "hover:shadow-md hover:border-gray-400",
-                  field.value === OTHER_SECTOR_NAME
-                    ? "border-gray-400 bg-gray-50 shadow-sm ring-2 ring-gray-300"
-                    : "border-dashed border-2 border-gray-300 hover:border-gray-400",
-                  "bg-gradient-to-br from-gray-50 to-gray-100"
-                )}
-                onClick={() => field.onChange(OTHER_SECTOR_NAME)}
-              >
-                <CardHeader className="pb-3">
-                  {/* Görsel Container */}
-                  <div className="relative w-full h-40 mb-3 rounded-md overflow-hidden">
-                    <Image
-                      src="/others.jpg"
-                      alt="Diğer sektörler"
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover transition-all duration-500 group-hover:scale-105 opacity-80"
-                    />
-
-                    {/* "Diğerleri" overlay ikonu */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent flex items-center justify-center">
-                      <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg">
-                        <MoreHorizontal className="w-6 h-6 text-gray-700" />
-                      </div>
                     </div>
+                    <CardTitle>Diğerleri</CardTitle>
+                  </CardHeader>
 
-                    {/* Seçim overlay */}
-                    {field.value === OTHER_SECTOR_NAME && (
-                      <div className="absolute inset-0 bg-gray-400/10 backdrop-blur-[1px] flex items-center justify-center">
-                        <CheckCircle2 className="w-8 h-8 text-gray-600" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Başlık ve Badge */}
-                  <div className="flex items-start justify-between">
-                    <CardTitle className="text-lg font-semibold">
-                      {OTHER_SECTOR_NAME}
-                      <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        (Diğer tüm sektörler)
-                      </span>
-                    </CardTitle>
-                    {field.value === OTHER_SECTOR_NAME && (
-                      <Badge className="bg-gray-600 hover:bg-gray-700">
-                        <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Seçildi
-                      </Badge>
-                    )}
-                  </div>
-                </CardHeader>
-
-                <CardContent className="pb-4">
-                  <input
-                    type="radio"
-                    value={OTHER_SECTOR_NAME}
-                    checked={field.value === OTHER_SECTOR_NAME}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    className="sr-only"
-                  />
-                  <CardDescription className="line-clamp-2">
-                    Listede yer almayan diğer sektörler için numune talep edin
-                  </CardDescription>
-
-                  {/* "Diğerleri" için ek bilgi */}
-                  {field.value !== OTHER_SECTOR_NAME && (
-                    <div className="mt-3 pt-3 border-t border-dashed border-gray-300">
-                      <p className="text-xs text-muted-foreground">
-                        Tıklayarak diğer sektörleri seçebilirsiniz
-                      </p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {fieldState.invalid && (
-              <FieldError errors={[fieldState.error]} className="mt-2" />
-            )}
-
-            {/* Seçilen sektör bilgisi */}
-            {field.value && (
-              <div className="mt-4 p-4 bg-primary/5 rounded-lg border border-primary/20">
-                <p className="text-sm font-medium">
-                  Seçilen sektör:{" "}
-                  <span className="text-primary font-semibold">
-                    {field.value}
-                  </span>
-                  {field.value === OTHER_SECTOR_NAME && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      (Diğer sektörler için)
-                    </span>
-                  )}
-                </p>
-                {field.value === OTHER_SECTOR_NAME && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Lütfen iletişim bilgilerinizi girerken, ilgilendiğiniz
-                    spesifik sektörü açıklamada belirtiniz.
-                  </p>
-                )}
+                  <CardContent>
+                    <CardDescription>
+                      Listede yer almayan sektörler
+                    </CardDescription>
+                  </CardContent>
+                </Card>
               </div>
-            )}
-          </Field>
-        )}
-      />
-    </div>
+
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+      </div>
+    </FormSectionStickyWrapper>
   );
 };

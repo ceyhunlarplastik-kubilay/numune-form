@@ -1,15 +1,18 @@
-// components/RequestForm.tsx
 "use client";
-import { useState, useEffect } from "react";
-import * as z from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Controller } from "react-hook-form";
-import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
-import { motion } from "framer-motion";
 
-import { Input } from "@/components/ui/input";
-import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import { useState, useMemo, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { motion } from "framer-motion";
+import { ChevronLeft, ChevronRight, Check } from "lucide-react";
+
+import { Form } from "@/components/ui/form";
+import { AsyncState } from "@/components/ui/async-state";
+
 import {
   FormHeader,
   FormFooter,
@@ -19,428 +22,365 @@ import {
   SubmitButton,
   MultiStepFormContent,
 } from "@/components/multi-step-viewer";
+
 import { MultiStepFormProvider } from "@/hooks/use-multi-step-viewer";
 
+import { WelcomeSection } from "@/components/form3/WelcomeSection";
 import { SectorFormSection } from "@/components/form3/SectorFormSection";
-import { ProductionGroupFormSection } from "@/components/form3/ProductionGroupFormSection";
 import { ProductsFormSection } from "@/components/form3/ProductsFormSection";
+import { ContactFormSection } from "@/components/form3/ContactFormSection";
 import { PreviewFormSection } from "@/components/form3/PreviewFormSection";
-import { PhoneInput } from "@/components/inputs/phone-input";
-import { isValidPhoneNumber } from "react-phone-number-input";
 
-// Form şeması
+/* -------------------------------------------------------------------------- */
+/*                                ZOD SCHEMA                                  */
+/* -------------------------------------------------------------------------- */
+
 const formSchema = z.object({
-  // Bölüm 1: Sektör
-  sektor: z.string().min(1, "Sektör seçiniz"),
-
-  // Bölüm 2: Üretim grubu
-  uretimGrubu: z.string().min(1, "Üretim grubu seçiniz"),
-
-  // Bölüm 3: Ürünler
-  urunler: z.array(z.string()).min(1, "En az bir ürün seçiniz"),
-
-  // Bölüm 4: İletişim bilgileri
+  /* sektor: z.string().min(1, "Lütfen bir sektör seçiniz"), */
+  sektor: z.string().nullable().optional(),
+  uretimGrubu: z.string().optional(),
+  urunler: z
+    .array(
+      z.object({
+        productId: z.string(),
+        productionGroupId: z.string(),
+      })
+    )
+    .min(1, "Lütfen en az bir ürün seçiniz"),
   firmaAdi: z.string().min(2, "Firma adı en az 2 karakter olmalıdır"),
-
   ad: z.string().optional(),
   soyad: z.string().optional(),
-  email: z.string().email("Geçerli bir email adresi giriniz").optional(),
-
+  email: z.email("Geçerli bir email adresi giriniz"),
   telefon: z
     .string()
-    .min(1, "Telefon numarası gereklidir")
-    .max(13, "Telefon numarası en fazla 10 karakter olmalıdır")
-    .refine(isValidPhoneNumber, { message: "Geçersiz telefon numarası" }),
-
-  adres: z.string(),
+    .min(1, "Telefon numarası zorunludur")
+    .refine(
+      (value) => {
+        // E.164 formatını kontrol et (örn: +905551234567)
+        return /^\+[1-9]\d{1,14}$/.test(value);
+      },
+      { message: "Geçerli bir telefon numarası giriniz" }
+    ),
+  adres: z.string().optional(),
 });
 
 type Schema = z.infer<typeof formSchema>;
 
-// Google Sheets'ten gelecek veri yapısı
-type OptionsData = {
-  [key: string]: string[]; // Anahtar: "Sektor__UretimGrubu", Değer: Ürün listesi
-};
+/* -------------------------------------------------------------------------- */
+/*                           REACT QUERY FETCHERS                              */
+/* -------------------------------------------------------------------------- */
+
+async function fetchSectors() {
+  const res = await fetch("/api/catalog/sectors");
+  if (!res.ok) throw new Error("Sektörler yüklenemedi");
+  return res.json();
+}
+
+async function fetchGroups(sectorId: string) {
+  // "others" = Diğerleri seçimi, API'ye "all" olarak gönder
+  const queryId = sectorId === "others" ? "all" : sectorId;
+  const res = await fetch(`/api/catalog/options?sectorId=${queryId}`);
+  if (!res.ok) throw new Error("Üretim grupları yüklenemedi");
+  return res.json();
+}
+
+/* async function submitRequest(payload: any) {
+  const res = await fetch("/api/submit-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+} */
+async function submitRequest(payload: any) {
+  const res = await fetch("/api/requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               MAIN COMPONENT                                */
+/* -------------------------------------------------------------------------- */
 
 export default function RequestForm3() {
-  const [success, setSuccess] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const form = useForm<Schema>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      firmaAdi: "",
-      ad: "",
-      soyad: "",
-      email: "",
-      telefon: "",
-      adres: "",
       sektor: "",
       uretimGrubu: "",
       urunler: [],
+      firmaAdi: "",
+      telefon: "",
+      adres: "",
+      ad: "",
+      soyad: "",
+      email: "",
     },
   });
 
-  // Google Sheets verilerini çek
-  const { data, isLoading, error } = useQuery<OptionsData>({
-    queryKey: ["sektor-urunler"],
-    queryFn: async () => {
-      const res = await fetch("/api/get-options");
-      if (!res.ok) throw new Error("Veri çekilemedi");
-      return res.json();
-    },
+  const selectedSector = form.watch("sektor");
+
+  /* -------------------------------------------------------------------------- */
+  /*                           QUERY: SECTORS (STATIC)                           */
+  /* -------------------------------------------------------------------------- */
+
+  const sectorsQuery = useQuery({
+    queryKey: ["sectors"],
+    queryFn: fetchSectors,
+    staleTime: Infinity, // sektörler değişmez
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
   });
-  console.log(data);
 
-  const options = data || {};
-  const selectedSektor = form.watch("sektor");
-  const selectedUretimGrubu = form.watch("uretimGrubu");
+  const sectors = useMemo(
+    () => (Array.isArray(sectorsQuery.data) ? sectorsQuery.data : []),
+    [sectorsQuery.data]
+  );
 
-  // Sektör değiştiğinde üretim grubunu sıfırla
+  /* -------------------------------------------------------------------------- */
+  /*                           QUERY: GROUPS + PRODUCTS                          */
+  /* -------------------------------------------------------------------------- */
+
+  // selectedSector can be a sector ID, "others", or empty string
+  // We need to fetch groups when there's any truthy value
+  const shouldFetchGroups = !!selectedSector && selectedSector.length > 0;
+
+  const groupsQuery = useQuery({
+    queryKey: ["groups", selectedSector],
+    queryFn: () => fetchGroups(selectedSector!),
+    enabled: shouldFetchGroups,
+    staleTime: 1000 * 60 * 10, // 10 dakika cache
+    gcTime: 1000 * 60 * 30, // 30 dakika çöp toplama
+  });
+
+  const groups = groupsQuery.data?.groups || [];
+
+  /* -------------------------------------------------------------------------- */
+  /*                    RESET PRODUCTS WHEN SECTOR CHANGES                       */
+  /* -------------------------------------------------------------------------- */
+
   useEffect(() => {
-    if (selectedSektor) {
+    // Sektör değiştiğinde ürünleri ve üretim grubunu temizle
+    if (selectedSector) {
+      form.setValue("urunler", []);
       form.setValue("uretimGrubu", "");
-      form.setValue("urunler", []);
     }
-  }, [selectedSektor, form]);
+  }, [selectedSector, form]);
 
-  // Üretim grubu değiştiğinde ürünleri sıfırla
-  useEffect(() => {
-    if (selectedUretimGrubu) {
-      form.setValue("urunler", []);
-    }
-  }, [selectedUretimGrubu, form]);
+  /* -------------------------------------------------------------------------- */
+  /*                           PREVIEW MAPPING (MEMO)                            */
+  /* -------------------------------------------------------------------------- */
 
-  // Sektör listesini oluştur
-  const sektorList = [
-    ...new Set(Object.keys(options).map((key) => key.split("__")[0])),
-  ];
+  const sectorOptions = useMemo(
+    () =>
+      sectors.map((s: any) => ({
+        sectorId: s._id,
+        name: s.name,
+      })),
+    [sectors]
+  );
 
-  // Seçilen sektöre ait üretim gruplarını oluştur
-  const uretimGrubuList =
-    selectedSektor === "Diğerleri"
-      ? [
-          ...new Set(Object.keys(options).map((key) => key.split("__")[1])),
-        ].sort()
-      : [
-          ...new Set(
-            Object.keys(options)
-              .filter((key) => key.split("__")[0] === selectedSektor)
-              .map((key) => key.split("__")[1])
-          ),
-        ];
+  const productOptions = useMemo(
+    () =>
+      groups.flatMap((g: any) =>
+        g.products.map((p: any) => ({
+          productId: p.productId,
+          name: p.name,
+        }))
+      ),
+    [groups]
+  );
 
-  // Seçilen sektör ve üretim grubuna ait ürünleri al
-  const urunlerList =
-    selectedSektor && selectedUretimGrubu
-      ? selectedSektor === "Diğerleri"
-        ? Object.keys(options)
-            .filter((key) => key.split("__")[1] === selectedUretimGrubu)
-            .flatMap((key) => options[key])
-        : options[`${selectedSektor}__${selectedUretimGrubu}`] || []
-      : [];
+  /* -------------------------------------------------------------------------- */
+  /*                              MUTATION: SUBMIT                               */
+  /* -------------------------------------------------------------------------- */
 
-  const handleSubmit = form.handleSubmit(async (formData) => {
-    setIsSubmitting(true);
-    try {
-      const res = await fetch("/api/submit-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...formData,
-          tarih: new Date().toISOString(),
-        }),
-      });
-
-      if (!res.ok) throw new Error("Gönderim başarısız");
-
-      setSuccess(true);
-      form.reset();
-    } catch (err) {
-      console.error(err);
-      alert("Form gönderilirken bir hata oluştu.");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const submitMutation = useMutation({
+    mutationFn: submitRequest,
+    onSuccess: () => {
+      toast.success("Talebiniz başarıyla alındı!");
+      setIsSuccess(true);
+    },
+    onError: () => {
+      toast.error("Bir hata oluştu, lütfen tekrar deneyin.");
+    },
   });
 
-  // Form adımları
-  const stepsFields = [
-    {
-      // Bölüm 1: Sektör seçimi
-      fields: ["sektor"],
-      component: <SectorFormSection form={form} sektorList={sektorList} />,
-    },
-    {
-      // Bölüm 2: Üretim grubu seçimi
-      fields: ["uretimGrubu"],
-      component: (
-        <ProductionGroupFormSection
-          form={form}
-          productionGroupList={uretimGrubuList}
-          selectedSektor={selectedSektor}
-        />
-      ),
-    },
-    {
-      // Bölüm 3: Ürün seçimi (çoklu)
-      fields: ["urunler"],
-      component: (
-        <ProductsFormSection
-          form={form}
-          selectedProductiongroup={selectedUretimGrubu}
-          selectedSector={selectedSektor}
-          productList={urunlerList}
-        />
-      ),
-    },
-    {
-      // Bölüm 4: İletişim bilgileri
-      fields: ["firmaAdi", "ad", "soyad", "email", "telefon", "adres"],
-      component: (
-        <>
-          <div className="space-y-2 mb-6 text-center">
-            <h2 className="mt-4 mb-1 font-bold text-2xl tracking-tight">
-              İletişim Bilgileri
-            </h2>
-            <p className="tracking-wide text-muted-foreground mb-5 text-wrap text-sm">
-              Lütfen iletişim bilgilerinizi giriniz.
-            </p>
-          </div>
+  const onSubmit = (data: Schema) => {
+    // "others" = Diğerleri, normal seçimler ise MongoDB ObjectId
+    const sectorIdToSend = data.sektor === "others" ? null : data.sektor;
 
-          <div className="space-y-4">
-            <Controller
-              name="firmaAdi"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid} className="gap-1">
-                  <FieldLabel htmlFor="firmaAdi">Firma Adı *</FieldLabel>
-                  <Input
-                    {...field}
-                    id="firmaAdi"
-                    type="text"
-                    placeholder="Firma adınız"
-                    aria-invalid={fieldState.invalid}
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
+    // Tüm ürünleri topla
+    const allProducts = groups.flatMap((g: any) => g.products);
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Controller
-                name="ad"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid} className="gap-1">
-                    <FieldLabel htmlFor="ad">Ad</FieldLabel>
-                    <Input
-                      {...field}
-                      id="ad"
-                      type="text"
-                      placeholder="Adınız"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
+    // Ürün ID'lerini isimlere dönüştür
+    const productNames = data.urunler
+      .map((pid) => {
+        const product = allProducts.find((p: any) => p.productId === pid);
+        return product?.name || null;
+      })
+      .filter(Boolean); // null değerleri filtrele
 
-              <Controller
-                name="soyad"
-                control={form.control}
-                render={({ field, fieldState }) => (
-                  <Field data-invalid={fieldState.invalid} className="gap-1">
-                    <FieldLabel htmlFor="soyad">Soyad</FieldLabel>
-                    <Input
-                      {...field}
-                      id="soyad"
-                      type="text"
-                      placeholder="Soyadınız"
-                      aria-invalid={fieldState.invalid}
-                    />
-                    {fieldState.invalid && (
-                      <FieldError errors={[fieldState.error]} />
-                    )}
-                  </Field>
-                )}
-              />
-            </div>
+    // Üretim grubunu bul - eğer seçilmemişse, seçilen ürünlerden otomatik tespit et
+    let groupName = groups.find(
+      (g: any) => g.groupId === data.uretimGrubu
+    )?.name;
 
-            <Controller
-              name="email"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid} className="gap-1">
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
-                  <Input
-                    {...field}
-                    id="email"
-                    type="email"
-                    placeholder="ornek@firma.com"
-                    aria-invalid={fieldState.invalid}
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
+    // Eğer üretim grubu seçilmemişse, seçilen ürünlerden otomatik tespit et
+    if (!groupName && data.urunler.length > 0) {
+      const firstProductId = data.urunler[0];
+      const groupWithProduct = groups.find((g: any) =>
+        g.products.some((p: any) => p.productId === firstProductId)
+      );
+      groupName = groupWithProduct?.name;
+    }
 
-            <Controller
-              name="telefon"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid} className="gap-1">
-                  <FieldLabel htmlFor="telefon">Telefon *</FieldLabel>
-                  <PhoneInput
-                    {...field}
-                    id="telefon"
-                    placeholder="Telefon numarası"
-                    defaultCountry="TR"
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
+    submitMutation.mutate({
+      companyName: data.firmaAdi,
+      firstName: data.ad,
+      lastName: data.soyad,
+      email: data.email,
+      phone: data.telefon,
+      address: data.adres,
+      sectorId: sectorIdToSend,
+      products: data.urunler,
+    });
+  };
 
-            <Controller
-              name="adres"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid} className="gap-1">
-                  <FieldLabel htmlFor="adres">Adres</FieldLabel>
-                  <textarea
-                    {...field}
-                    id="adres"
-                    rows={3}
-                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    placeholder="Firma adresiniz"
-                    aria-invalid={fieldState.invalid}
-                  />
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-          </div>
-        </>
-      ),
-    },
-    {
-      // Bölüm 5: Önizleme ve Onay
-      fields: [], // Bu adımda validasyon yok, sadece görüntüleme
-      component: <PreviewFormSection form={form} />,
-    },
-  ];
+  /* -------------------------------------------------------------------------- */
+  /*                               SUCCESS SCREEN                                */
+  /* -------------------------------------------------------------------------- */
 
-  if (isLoading) {
+  if (isSuccess) {
     return (
-      <div className="flex items-center justify-center min-h-[400px] w-full">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-3 border-[#ccb36e]/30 border-t-[#ccb36e] rounded-full animate-spin"></div>
-          <div className="text-center">
-            <h3 className="font-medium text-zinc-700 dark:text-zinc-200 mb-1">
-              Yükleniyor
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Form bilgileri hazırlanıyor
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-6 bg-red-50 border border-red-200 rounded-lg">
-        <h3 className="text-red-700 font-medium mb-2">Hata oluştu</h3>
-        <p className="text-red-600 text-sm">{error.message}</p>
-      </div>
-    );
-  }
-
-  if (success) {
-    return (
-      <div className="p-4 sm:p-6 md:p-8 w-full rounded-lg gap-2 border bg-white dark:bg-zinc-800 shadow-lg max-w-5xl mx-auto">
+      <div className="p-5 w-full rounded-md border bg-white shadow-sm">
         <motion.div
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="h-full py-6 px-3"
+          className="flex flex-col items-center justify-center text-center py-12"
         >
-          <motion.div
-            initial={{ scale: 0.5 }}
-            animate={{ scale: 1 }}
-            transition={{
-              delay: 0.3,
-              type: "spring",
-            }}
-            className="mb-4 flex justify-center border rounded-full w-fit mx-auto p-2 bg-green-100 dark:bg-green-900"
-          >
-            <Check className="size-8 text-green-600 dark:text-green-400" />
-          </motion.div>
-          <h2 className="text-center text-2xl text-pretty font-bold mb-2">
-            Numune Talebiniz Alındı!
-          </h2>
-          <p className="text-center text-lg text-pretty text-muted-foreground">
-            En kısa sürede sizinle iletişime geçeceğiz. Teşekkür ederiz.
-          </p>
-          <div className="flex justify-center mt-6">
-            <button
-              onClick={() => {
-                setSuccess(false);
-                form.reset();
-              }}
-              className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              Yeni Talep Oluştur
-            </button>
+          <div className="mb-6 flex justify-center border-4 border-green-100 bg-green-50 rounded-full p-4">
+            <Check className="w-12 h-12 text-green-600" />
           </div>
+          <h2 className="text-3xl font-bold mb-4">Teşekkürler!</h2>
+          <p className="text-muted-foreground max-w-md">
+            Numune talebiniz başarıyla alınmıştır. En kısa sürede sizinle
+            iletişime geçeceğiz.
+          </p>
         </motion.div>
       </div>
     );
   }
 
-  return (
-    <div>
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col p-3 md:p-6 lg:p-8 w-full min-w-full mx-auto rounded-lg max-w-7xl gap-2 border bg-white dark:bg-zinc-800 shadow-lg"
-      >
-        <MultiStepFormProvider
-          stepsFields={stepsFields}
-          onStepValidation={async (step) => {
-            const isValid = await form.trigger(step.fields as any);
-            return isValid;
-          }}
+  /* -------------------------------------------------------------------------- */
+  /*                                  FORM VIEW                                  */
+  /* -------------------------------------------------------------------------- */
+
+  const stepsFields = [
+    { fields: [], component: <WelcomeSection /> },
+
+    {
+      fields: ["sektor"],
+      component: (
+        <AsyncState
+          isLoading={sectorsQuery.isLoading}
+          isError={sectorsQuery.isError}
+          error={sectorsQuery.error}
+          loadingMessage="Sektörler yükleniyor..."
         >
-          <MultiStepFormContent>
-            <FormHeader />
-            <StepFields />
-            <FormFooter>
-              <PreviousButton>
-                <ChevronLeft className="w-4 h-4" />
-                Geri
-              </PreviousButton>
-              <NextButton>
-                İleri <ChevronRight className="w-4 h-4" />
-              </NextButton>
-              <SubmitButton type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Gönderiliyor..." : "Numune Talebi Gönder"}
-              </SubmitButton>
-            </FormFooter>
-          </MultiStepFormContent>
-        </MultiStepFormProvider>
-      </form>
+          <SectorFormSection form={form} sectors={sectors} />
+        </AsyncState>
+      ),
+    },
+
+    {
+      fields: ["urunler"],
+      component: (
+        <AsyncState
+          isLoading={groupsQuery.isLoading}
+          isError={groupsQuery.isError}
+          error={groupsQuery.error}
+          loadingMessage="Ürünler yükleniyor..."
+        >
+          <ProductsFormSection form={form} groups={groups} />
+        </AsyncState>
+      ),
+    },
+
+    {
+      fields: ["firmaAdi", "ad", "soyad", "email", "telefon", "adres"],
+      component: <ContactFormSection form={form} />,
+    },
+
+    {
+      fields: [],
+      component: (
+        <PreviewFormSection
+          form={form}
+          sectors={sectorOptions}
+          groups={groups}
+          products={productOptions}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div className="max-w-3xl mx-auto pb-20 px-2 md:px-4">
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="flex flex-col p-6 rounded-xl border bg-white shadow-sm min-h-[600px]"
+        >
+          <MultiStepFormProvider
+            stepsFields={stepsFields}
+            onStepValidation={async (step) => {
+              if (step.fields.length === 0) return true;
+
+              const isValid = await form.trigger(step.fields as any);
+
+              if (step.fields.includes("urunler")) {
+                const selectedProducts = form.getValues("urunler");
+                if (!selectedProducts?.length) {
+                  toast.warning("Lütfen en az bir ürün seçiniz.");
+                  return false;
+                }
+              }
+
+              return isValid;
+            }}
+          >
+            <MultiStepFormContent className="h-full justify-between">
+              <div className="space-y-6">
+                <FormHeader />
+                <StepFields />
+              </div>
+
+              <FormFooter>
+                <PreviousButton>
+                  <ChevronLeft className="w-4 h-4" /> Geri
+                </PreviousButton>
+
+                <NextButton>
+                  İleri <ChevronRight className="w-4 h-4" />
+                </NextButton>
+
+                <SubmitButton disabled={submitMutation.isPending}>
+                  {submitMutation.isPending
+                    ? "Gönderiliyor..."
+                    : "Talebi Gönder"}
+                </SubmitButton>
+              </FormFooter>
+            </MultiStepFormContent>
+          </MultiStepFormProvider>
+        </form>
+      </Form>
     </div>
   );
 }
