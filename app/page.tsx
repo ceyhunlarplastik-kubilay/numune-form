@@ -6,7 +6,8 @@ export default function Home() {
       className="flex min-h-screen flex-col items-center justify-center 
       bg-gradient-to-b from-[#ccb36e]/10 via-white to-white 
       dark:from-[#ccb36e]/5 dark:via-zinc-900 dark:to-black
-      p-2 sm:p-4 md:p-8 lg:p-12"
+      py-2"
+      // p-2 sm:p-4 md:p-8 lg:p-12
     >
       {/* Form Bileşeni */}
       <div

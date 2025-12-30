@@ -1,13 +1,16 @@
 "use client";
 
 import { Controller } from "react-hook-form";
-import { useRef, useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { useDebounce } from "use-debounce";
 import { Field, FieldError } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { ArrowDown } from "lucide-react";
-import { FormSectionStickyWrapper } from "@/components/form3/form-section/FormSectionStickyWrapper";
+import { motion, AnimatePresence } from "motion/react";
+import { ArrowDown, Search } from "lucide-react";
+import { FormSectionHeader } from "@/components/form3/form-section/FormSectionHeader";
+import { ScrollSpyNavigation } from "@/components/ui/scroll-spy-navigation";
+import { Input } from "@/components/ui/input";
 
 export const ProductsFormSection = ({
   form,
@@ -20,14 +23,10 @@ export const ProductsFormSection = ({
     products: Array<{ productId: string; name: string; imageUrl?: string }>;
   }>;
 }) => {
-  // uretimGrubu form değerini tek kaynak olarak kullanalım
-  const activeGroupId: string | undefined = form.watch("uretimGrubu");
   const selectedProducts = form.watch("urunler");
-
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const tabContainerRef = useRef<HTMLDivElement | null>(null);
-  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [isReady, setIsReady] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch] = useDebounce(search, 300);
 
   /* -------------------------------------------------------------------------- */
   /*                       GRUPLAR YÜKLENDİĞİNDE HAZIRLIK                        */
@@ -46,108 +45,69 @@ export const ProductsFormSection = ({
   }, [groups.length]);
 
   // İlk yüklemede (veya grup değiştiğinde) eğer hiç seçili yoksa ilk grubu seç
+  // NOTE: This might be handled by ScrollSpy's defaultActiveId as well,
+  // but keeping it to ensure form state is sync
   useEffect(() => {
-    if (groups.length > 0 && !activeGroupId) {
-      const firstGroupId = groups[0].groupId;
-      form.setValue("uretimGrubu", firstGroupId, {
-        shouldDirty: false,
-        shouldTouch: false,
-      });
+    if (groups.length > 0) {
+      // Optional: Set initial value if needed, but ScrollSpy will trigger onActiveChange
+      // shortly after mounting via its effect if we want.
+      // For now, let's trust the user interaction or ScrollSpy init.
+      console.log("groups", groups);
     }
-  }, [groups, activeGroupId, form]);
+  }, [groups]);
 
   /* -------------------------------------------------------------------------- */
-  /*                               SCROLL SPY (OBSERVER)                         */
+  /*                            FİLTRELEME                                      */
   /* -------------------------------------------------------------------------- */
 
-  useEffect(() => {
-    if (groups.length === 0 || !isReady) return;
+  const filteredGroups = useMemo(() => {
+    if (!debouncedSearch.trim()) return groups;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const groupId = entry.target.getAttribute("data-group-id");
-          if (!groupId) return;
+    const keyword = debouncedSearch.toLowerCase();
 
-          // Section viewport içinde yeterince görünürse form'u güncelle
-          if (entry.isIntersecting && entry.intersectionRatio > 0.25) {
-            if (groupId !== activeGroupId) {
-              form.setValue("uretimGrubu", groupId, {
-                shouldDirty: false,
-                shouldTouch: false,
-              });
-            }
-          }
-        });
-      },
-      {
-        root: null,
-        rootMargin: "-120px 0px -50% 0px",
-        threshold: [0.25, 0.5, 0.75],
-      }
-    );
+    return groups
+      .map((group) => {
+        const filteredProducts = group.products.filter((product) =>
+          product.name.toLowerCase().includes(keyword)
+        );
 
-    const sections = Object.values(sectionRefs.current);
-    sections.forEach((section) => {
-      if (section) observer.observe(section);
-    });
-
-    return () => observer.disconnect();
-  }, [groups, isReady, form, activeGroupId]);
+        return {
+          ...group,
+          products: filteredProducts,
+        };
+      })
+      .filter((group) => group.products.length > 0);
+  }, [groups, debouncedSearch]);
 
   /* -------------------------------------------------------------------------- */
-  /*                     AKTİF TABI GÖRÜNÜR TUTMA (AUTO-SCROLL)                 */
+  /*                            AGREEMENT CHANGE                                */
   /* -------------------------------------------------------------------------- */
-
-  useEffect(() => {
-    if (!activeGroupId || !tabContainerRef.current) return;
-
-    const activeTab = tabRefs.current[activeGroupId];
-    if (!activeTab) return;
-
-    const container = tabContainerRef.current;
-    const tabLeft = activeTab.offsetLeft;
-    const tabWidth = activeTab.offsetWidth;
-    const containerScrollLeft = container.scrollLeft;
-    const containerWidth = container.offsetWidth;
-
-    if (tabLeft < containerScrollLeft) {
-      container.scrollTo({
-        left: tabLeft - 20,
-        behavior: "smooth",
-      });
-    } else if (tabLeft + tabWidth > containerScrollLeft + containerWidth) {
-      container.scrollTo({
-        left: tabLeft - containerWidth + tabWidth + 20,
-        behavior: "smooth",
-      });
-    }
-  }, [activeGroupId]);
-
-  /* -------------------------------------------------------------------------- */
-  /*                       TAB'A TIKLAYINCA İLGİLİ GRUBA SCROLL                 */
-  /* -------------------------------------------------------------------------- */
-
-  const scrollToGroup = (groupId: string) => {
-    const target = sectionRefs.current[groupId];
-    if (!target) return;
-
-    // Sticky header yüksekliği kadar offset
-    const headerOffset = 180;
-    const elementPosition = target.getBoundingClientRect().top;
-    const offsetPosition = elementPosition + window.scrollY - headerOffset;
-
-    window.scrollTo({
-      top: offsetPosition,
-      behavior: "smooth",
-    });
-
-    // Hemen form değerini güncelle ki highlight anında değişsin
+  const handleActiveGroupChange = (groupId: string) => {
     form.setValue("uretimGrubu", groupId, {
       shouldDirty: false,
       shouldTouch: false,
+      shouldValidate: false,
     });
   };
+
+  /* -------------------------------------------------------------------------- */
+  /*                         SCROLL DETECTION (Floating Button)                 */
+  /* -------------------------------------------------------------------------- */
+  const [showFloatingButton, setShowFloatingButton] = useState(true);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      // Check if we are near the bottom of the page (e.g., within 100px)
+      const isNearBottom =
+        window.innerHeight + window.scrollY >=
+        document.documentElement.scrollHeight - 150;
+
+      setShowFloatingButton(!isNearBottom);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   /* -------------------------------------------------------------------------- */
   /*                            LOADING DURUMU                                   */
@@ -166,6 +126,8 @@ export const ProductsFormSection = ({
   /*                                  RENDER                                     */
   /* -------------------------------------------------------------------------- */
 
+  const tabs = groups.map((g) => ({ id: g.groupId, label: g.name }));
+
   return (
     <AnimatePresence mode="wait">
       <motion.div
@@ -176,121 +138,136 @@ export const ProductsFormSection = ({
         transition={{ duration: 0.3 }}
         className="space-y-6"
       >
-        {/* STICKY HEADER + TAB BAR */}
-        <FormSectionStickyWrapper
-          title="Ürün Seçimi"
-          description="İlgili üretim grubundan ürün seçiniz. Birden fazla ürün seçebilirsiniz."
-          tabContainerRef={tabContainerRef}
-          tabRefs={tabRefs}
-          groups={groups.map((g) => ({
-            groupId: g.groupId,
-            name: g.name,
-          }))}
-          activeGroupId={activeGroupId}
-          scrollToGroup={scrollToGroup}
-        >
-          {/* === PRODUCT SELECTION (GROUPED) === */}
-          <Controller
-            name="urunler"
-            control={form.control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid} className="space-y-4">
-                {groups.map((group) => (
-                  <div
-                    key={group.groupId}
-                    data-group-id={group.groupId}
-                    ref={(el) => {
-                      sectionRefs.current[group.groupId] = el;
-                    }}
-                    className="space-y-2 border rounded-lg p-4 bg-gray-50"
-                  >
-                    <h3 className="text-lg font-semibold text-primary mb-2">
-                      {group.name}
-                    </h3>
+        {/* STICKY HEADER WRAPPER */}
+        <div className="sticky top-0 z-20 bg-white border-b shadow-sm">
+          <div className="pt-4 px-1">
+            <FormSectionHeader
+              title="Ürün Seçimi"
+              description="İlgili üretim grubundan ürün seçiniz. Birden fazla ürün seçebilirsiniz."
+            />
+          </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                      {group.products.map((product) => {
-                        const isChecked = field.value?.some(
-                          (item: any) => item.productId === product.productId
-                        );
-
-                        return (
-                          <label
-                            key={product.productId}
-                            className={cn(
-                              "flex flex-col gap-2 p-3 rounded-lg border cursor-pointer transition-all",
-                              "hover:bg-gray-100 hover:shadow-md",
-                              isChecked &&
-                                "border-primary bg-primary/5 shadow-sm"
-                            )}
-                          >
-                            <div className="relative w-full aspect-square rounded-md overflow-hidden bg-white">
-                              <Image
-                                src={product.imageUrl || "/dairy-products.png"}
-                                alt={product.name}
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-
-                            <div className="flex items-start gap-2">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-                                  const current = field.value || [];
-
-                                  if (checked) {
-                                    field.onChange([
-                                      ...current,
-                                      {
-                                        productId: product.productId,
-                                        productionGroupId: group.groupId,
-                                      },
-                                    ]);
-                                  } else {
-                                    field.onChange(
-                                      current.filter(
-                                        (item: any) =>
-                                          item.productId !== product.productId
-                                      )
-                                    );
-                                  }
-                                }}
-                                className="mt-0.5 h-4 w-4 text-primary border-gray-300 rounded"
-                              />
-
-                              <span className="font-medium text-sm leading-tight">
-                                {product.name}
-                              </span>
-                            </div>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-
-                {selectedProducts?.length > 0 && (
-                  <div className="mt-3 p-3 bg-primary/5 rounded-lg">
-                    <p className="text-sm font-medium">
-                      Seçilen ürün sayısı: {selectedProducts.length}
-                    </p>
-                  </div>
-                )}
-              </Field>
-            )}
+          <ScrollSpyNavigation
+            tabs={tabs}
+            offset={140} // Adjust based on header height
+            onActiveChange={handleActiveGroupChange}
+            className="border-b-0" // Remove bottom border as the wrapper container handles visual separation if needed
           />
-        </FormSectionStickyWrapper>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+
+          <Input
+            className="pl-10"
+            placeholder="Ürün ara..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {/* === NO RESULTS === */}
+        {debouncedSearch && filteredGroups.length === 0 && (
+          <div className="text-center py-10 text-muted-foreground">
+            “{debouncedSearch}” ile eşleşen ürün bulunamadı.
+          </div>
+        )}
+
+        {/* === PRODUCT SELECTION (GROUPED) === */}
+        <Controller
+          name="urunler"
+          control={form.control}
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid} className="space-y-4">
+              {filteredGroups.map((group) => (
+                <div
+                  key={group.groupId}
+                  id={group.groupId} // ID REQUIRED FOR SCROLL SPY
+                  className="space-y-2 border rounded-lg p-4 bg-gray-50 scroll-mt-48" // scroll-mt checks offset
+                >
+                  <h3 className="text-lg font-semibold text-primary mb-2">
+                    {group.name}
+                  </h3>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                    {group.products.map((product) => {
+                      const isChecked = field.value?.some(
+                        (item: any) => item.productId === product.productId
+                      );
+
+                      return (
+                        <label
+                          key={product.productId}
+                          className={cn(
+                            "flex flex-col gap-2 p-3 rounded-lg border cursor-pointer transition-all",
+                            "hover:bg-gray-100 hover:shadow-md",
+                            isChecked && "border-primary bg-primary/5 shadow-sm"
+                          )}
+                        >
+                          <div className="relative w-full aspect-square rounded-md overflow-hidden bg-white">
+                            <Image
+                              src={product.imageUrl || "/dairy-products.png"}
+                              alt={product.name}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+
+                          <div className="flex items-start gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                const current = field.value || [];
+
+                                if (checked) {
+                                  field.onChange([
+                                    ...current,
+                                    {
+                                      productId: product.productId,
+                                      productionGroupId: group.groupId,
+                                    },
+                                  ]);
+                                } else {
+                                  field.onChange(
+                                    current.filter(
+                                      (item: any) =>
+                                        item.productId !== product.productId
+                                    )
+                                  );
+                                }
+                              }}
+                              className="mt-0.5 h-4 w-4 text-primary border-gray-300 rounded"
+                            />
+
+                            <span className="font-medium text-sm leading-tight">
+                              {product.name}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+
+              {selectedProducts?.length > 0 && (
+                <div className="mt-3 p-3 bg-primary/5 rounded-lg">
+                  <p className="text-sm font-medium">
+                    Seçilen ürün sayısı: {selectedProducts.length}
+                  </p>
+                </div>
+              )}
+            </Field>
+          )}
+        />
 
         {/* Floating "Sona Git" Button */}
         <AnimatePresence>
-          {selectedProducts?.length > 0 && (
+          {selectedProducts?.length > 0 && showFloatingButton && (
             <motion.button
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

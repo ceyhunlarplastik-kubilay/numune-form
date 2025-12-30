@@ -86,7 +86,7 @@ export const ContactFormSection = ({ form }: { form: any }) => {
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid} className="space-y-1">
               <FieldLabel>E-posta</FieldLabel>
-              <Input {...field} type="email" placeholder="ornek@sirket.com" />
+              <Input {...field} type="email" placeholder="foo@bar.com" />
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
             </Field>
           )}
@@ -104,7 +104,7 @@ export const ContactFormSection = ({ form }: { form: any }) => {
                 value={field.value}
                 onChange={field.onChange}
                 defaultCountry="TR"
-                placeholder="Telefon numaranızı giriniz"
+                placeholder="555 555 55 55"
               />
 
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
@@ -122,7 +122,7 @@ export const ContactFormSection = ({ form }: { form: any }) => {
             <FieldLabel>Adres</FieldLabel>
             <Textarea
               {...field}
-              placeholder="Açık adresiniz..."
+              placeholder="Şirket adresiniz..."
               className="min-h-[100px]"
             />
             {fieldState.invalid && <FieldError errors={[fieldState.error]} />}

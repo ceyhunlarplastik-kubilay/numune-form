@@ -109,6 +109,7 @@ export default function RequestForm3() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   const form = useForm<Schema>({
+    mode: "onChange",
     resolver: zodResolver(formSchema),
     defaultValues: {
       sektor: "",
@@ -332,7 +333,7 @@ export default function RequestForm3() {
   ];
 
   return (
-    <div className="max-w-3xl mx-auto pb-20 px-2 md:px-4">
+    <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
       <Form {...form}>
         <form
           onSubmit={form.handleSubmit(onSubmit)}

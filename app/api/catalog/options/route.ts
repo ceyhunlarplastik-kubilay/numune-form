@@ -67,6 +67,7 @@ export async function GET(request: Request) {
                 groupProductsMap.get(gId)!.push({
                     productId: product._id.toString(),
                     name: product.name,
+                    imageUrl: product.imageUrl || null,
                 });
             }
         }

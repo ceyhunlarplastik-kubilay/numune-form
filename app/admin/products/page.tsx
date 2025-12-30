@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Loader2, Upload, X } from "lucide-react";
+import { upload } from "@vercel/blob/client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,11 +117,18 @@ async function fetchProductAssignments(productId: string) {
 
 export default function ProductsAdminPage() {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Blob states
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
 
   // Dialog states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -132,6 +140,15 @@ export default function ProductsAdminPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([
     { sectorId: "", productionGroupId: "" },
   ]);
+
+  // Clean up object URLs to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   /* ---------------------------- QUERIES ---------------------------- */
 
@@ -207,8 +224,23 @@ export default function ProductsAdminPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (productId: string) => {
-      const res = await fetch(`/api/products?productId=${productId}`, {
+    mutationFn: async (product: Product) => {
+      // 1. Delete image if exists
+      if (product.imageUrl) {
+        try {
+          await fetch(
+            `/api/products/upload?url=${encodeURIComponent(product.imageUrl)}`,
+            {
+              method: "DELETE",
+            }
+          );
+        } catch (e) {
+          console.error("Image deletion failed", e);
+        }
+      }
+
+      // 2. Delete product
+      const res = await fetch(`/api/products?productId=${product._id}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Ürün silinemedi");
@@ -229,6 +261,12 @@ export default function ProductsAdminPage() {
   const resetForm = () => {
     setFormData({ name: "", description: "", imageUrl: "" });
     setAssignments([{ sectorId: "", productionGroupId: "" }]);
+    setSelectedFile(null);
+    setPreviewUrl("");
+    setOriginalImageUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   const openEditDialog = async (product: Product) => {
@@ -237,6 +275,9 @@ export default function ProductsAdminPage() {
       description: product.description || "",
       imageUrl: product.imageUrl || "",
     });
+    setPreviewUrl(product.imageUrl || "");
+    setOriginalImageUrl(product.imageUrl || null);
+    setSelectedFile(null);
 
     // Fetch existing assignments
     try {
@@ -257,7 +298,7 @@ export default function ProductsAdminPage() {
     setEditingProduct(product);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Filter out incomplete assignments
     const validAssignments = assignments.filter(
       (a) => a.sectorId && a.productionGroupId
@@ -273,15 +314,60 @@ export default function ProductsAdminPage() {
       return;
     }
 
+    let finalImageUrl = formData.imageUrl;
+
+    // 1. Upload logic (if file selected)
+    if (selectedFile) {
+      setUploading(true);
+      try {
+        const newBlob = await upload(selectedFile.name, selectedFile, {
+          access: "public",
+          handleUploadUrl: "/api/products/upload",
+        });
+        finalImageUrl = newBlob.url;
+      } catch (error) {
+        console.error("Upload failed", error);
+        toast.error("Görsel yüklenemedi");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    // 2. CHECK & DELETE OLD IMAGE
+    // If we are editing, and there was an original image,
+    // and the new finalImageUrl is different (either empty or a new uploaded one)
+    if (
+      editingProduct &&
+      originalImageUrl &&
+      originalImageUrl !== finalImageUrl
+    ) {
+      try {
+        await fetch(
+          `/api/products/upload?url=${encodeURIComponent(originalImageUrl)}`,
+          {
+            method: "DELETE",
+          }
+        );
+        console.log("Old image deleted:", originalImageUrl);
+      } catch (error) {
+        console.error("Failed to delete old image:", error);
+        // We continue even if delete fails, to not block the product update
+      }
+    }
+
+    // 3. Mutation logic
     if (editingProduct) {
       updateMutation.mutate({
         productId: editingProduct._id,
         ...formData,
+        imageUrl: finalImageUrl,
         assignments: validAssignments,
       });
     } else {
       createMutation.mutate({
         ...formData,
+        imageUrl: finalImageUrl,
         assignments: validAssignments,
       });
     }
@@ -313,10 +399,33 @@ export default function ProductsAdminPage() {
     setAssignments(updated);
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      return;
+    }
+
+    const file = e.target.files[0];
+    setSelectedFile(file);
+
+    // Create local preview
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+  };
+
+  const removeImage = () => {
+    setFormData((prev) => ({ ...prev, imageUrl: "" }));
+    setSelectedFile(null);
+    setPreviewUrl("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   /* --------------------------- RENDER --------------------------- */
 
   const isDialogOpen = isCreateOpen || !!editingProduct;
-  const isPending = createMutation.isPending || updateMutation.isPending;
+  const isPending =
+    createMutation.isPending || updateMutation.isPending || uploading;
 
   return (
     <div className="p-6 space-y-6">
@@ -371,7 +480,14 @@ export default function ProductsAdminPage() {
                     </TableCell>
                     <TableCell>
                       {product.imageUrl ? (
-                        <Badge variant="outline">Var</Badge>
+                        <div className="flex items-center space-x-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            className="w-10 h-10 object-cover rounded-md border"
+                          />
+                        </div>
                       ) : (
                         <Badge variant="secondary">Yok</Badge>
                       )}
@@ -451,18 +567,51 @@ export default function ProductsAdminPage() {
               </div>
 
               <div>
-                <Label htmlFor="imageUrl">Görsel URL</Label>
-                <Input
-                  id="imageUrl"
-                  value={formData.imageUrl}
-                  onChange={(e) =>
-                    setFormData({ ...formData, imageUrl: e.target.value })
-                  }
-                  placeholder="https://... (TODO: S3 upload gelecek)"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  TODO: S3 entegrasyonu eklenecek
-                </p>
+                <Label>Ürün Görseli</Label>
+                <div className="mt-2 space-y-4">
+                  {previewUrl ? (
+                    <div className="relative w-full max-w-xs aspect-video bg-muted rounded-lg overflow-hidden border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={previewUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-8 w-8"
+                        onClick={removeImage}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center w-full max-w-xs aspect-video bg-muted/50 rounded-lg border border-dashed">
+                      <div className="text-center p-4">
+                        <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                        <p className="text-sm text-muted-foreground">
+                          Görsel yüklemek için seçin
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      disabled={uploading}
+                      className="cursor-pointer"
+                    />
+                    {uploading && (
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -507,7 +656,15 @@ export default function ProductsAdminPage() {
               İptal
             </Button>
             <Button onClick={handleSubmit} disabled={isPending}>
-              {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {uploading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Yükleniyor...
+                </>
+              ) : isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
+
               {editingProduct ? "Güncelle" : "Oluştur"}
             </Button>
           </DialogFooter>
@@ -531,7 +688,7 @@ export default function ProductsAdminPage() {
             <AlertDialogCancel>Vazgeç</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
-                deletingProduct && deleteMutation.mutate(deletingProduct._id)
+                deletingProduct && deleteMutation.mutate(deletingProduct)
               }
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
