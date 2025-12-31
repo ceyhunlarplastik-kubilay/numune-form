@@ -1,11 +1,15 @@
 // app/api/customers/route.ts
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import { Request, Sector, Product, ProductionGroup } from "@/models/index";
 
 const DEFAULT_LIMIT = 10;
 
 export async function GET(req: Request) {
+    const authError = await requireAdmin();
+    if (authError) return authError;
+
     try {
         await connectDB();
 
