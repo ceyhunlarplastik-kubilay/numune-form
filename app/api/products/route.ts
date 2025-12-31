@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Product, ProductAssignment } from "@/models";
+import { requireAdmin } from "@/lib/auth";
 
 /* -------------------------------------------------------------------------- */
 /*                                    GET                                     */
@@ -13,34 +14,57 @@ export async function GET(req: Request) {
 
         const { searchParams } = new URL(req.url);
         const productIdParam = searchParams.get("productId");
+        const search = searchParams.get("search");
+        const sectorId = searchParams.get("sectorId");
+        const productionGroupId = searchParams.get("productionGroupId");
 
-        // ❗ Hiç parametre yoksa → tüm ürünleri döndür
-        if (!productIdParam) {
-            const allProducts = await Product.find().lean();
-            return NextResponse.json(allProducts);
-        }
-
-        // productId birden fazla olabilir → virgülle ayır
-        const productIds = productIdParam.split(",").map((id) => id.trim());
-
-        // ❗ Eğer 1 ID varsa tek ürün döndür
-        if (productIds.length === 1) {
-            const product = await Product.findById(productIds[0]).lean();
-
-            if (!product) {
-                return NextResponse.json(
-                    { error: "Ürün bulunamadı" },
-                    { status: 404 }
-                );
+        // 1. If productId param exists, return specific product(s) (existing logic)
+        if (productIdParam) {
+            const productIds = productIdParam.split(",").map((id) => id.trim());
+            if (productIds.length === 1) {
+                const product = await Product.findById(productIds[0]).lean();
+                if (!product) {
+                    return NextResponse.json({ error: "Ürün bulunamadı" }, { status: 404 });
+                }
+                return NextResponse.json(product);
             }
-
-            return NextResponse.json(product);
+            const products = await Product.find({ _id: { $in: productIds } }).lean();
+            return NextResponse.json(products);
         }
 
-        // ❗ Birden fazla ID varsa array döndür
-        const products = await Product.find({
-            _id: { $in: productIds },
-        }).lean();
+        // 2. Build Filter Query
+        let productIdsFromAssignments: string[] | null = null;
+
+        // If filtering by sector or group, we need to check assignments first
+        if (sectorId || productionGroupId) {
+            const assignmentQuery: any = {};
+            if (sectorId && sectorId !== "all") assignmentQuery.sectorId = sectorId;
+            if (productionGroupId && productionGroupId !== "all") assignmentQuery.productionGroupId = productionGroupId;
+
+            const assignments = await ProductAssignment.find(assignmentQuery).select("productId").lean();
+            productIdsFromAssignments = assignments.map((a: any) => a.productId.toString());
+
+            // If no assignments found for filter, return empty early
+            if (productIdsFromAssignments.length === 0) {
+                return NextResponse.json([]);
+            }
+        }
+
+        // 3. Build Product Query
+        const productQuery: any = {};
+
+        // Name search
+        if (search) {
+            productQuery.name = { $regex: search, $options: "i" };
+        }
+
+        // Filter by IDs if assignments restricted them
+        if (productIdsFromAssignments !== null) {
+            productQuery._id = { $in: productIdsFromAssignments };
+        }
+
+        // 4. Fetch Products
+        const products = await Product.find(productQuery).sort({ createdAt: -1 }).lean();
 
         return NextResponse.json(products);
     } catch (error) {
@@ -57,6 +81,9 @@ export async function GET(req: Request) {
 /* -------------------------------------------------------------------------- */
 
 export async function POST(req: Request) {
+    const authError = await requireAdmin();
+    if (authError) return authError;
+
     try {
         await connectDB();
 
@@ -131,6 +158,9 @@ export async function POST(req: Request) {
 /* -------------------------------------------------------------------------- */
 
 export async function PUT(req: Request) {
+    const authError = await requireAdmin();
+    if (authError) return authError;
+
     try {
         await connectDB();
 
@@ -199,6 +229,9 @@ export async function PUT(req: Request) {
 /* -------------------------------------------------------------------------- */
 
 export async function DELETE(req: Request) {
+    const authError = await requireAdmin();
+    if (authError) return authError;
+
     try {
         await connectDB();
 

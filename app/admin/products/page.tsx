@@ -1,10 +1,24 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import axios from "axios";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, Loader2, Upload, X } from "lucide-react";
-import { upload } from "@vercel/blob/client";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  Upload,
+  X,
+  Search,
+  Filter,
+  XCircle,
+} from "lucide-react";
+import { useForm, useFieldArray } from "react-hook-form";
+import { useDebounce } from "use-debounce";
+import { motion, AnimatePresence } from "motion/react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 
 /* -------------------------------------------------------------------------- */
 /*                                   TYPES                                    */
@@ -67,8 +81,6 @@ interface Product {
 interface Assignment {
   sectorId: string;
   productionGroupId: string;
-  sectorName?: string;
-  groupName?: string;
 }
 
 interface Sector {
@@ -77,7 +89,7 @@ interface Sector {
 }
 
 interface ProductionGroup {
-  _id: string;
+  groupId: string;
   name: string;
 }
 
@@ -85,63 +97,95 @@ interface ProductionGroup {
 /*                                  FETCHERS                                  */
 /* -------------------------------------------------------------------------- */
 
-async function fetchProducts(): Promise<Product[]> {
-  const res = await fetch("/api/products");
-  if (!res.ok) throw new Error("Ürünler yüklenemedi");
-  return res.json();
+async function fetchProducts(
+  search: string,
+  sectorId: string,
+  productionGroupId: string
+): Promise<Product[]> {
+  const params: any = {};
+  if (search) params.search = search;
+  if (sectorId && sectorId !== "all") params.sectorId = sectorId;
+  if (productionGroupId && productionGroupId !== "all")
+    params.productionGroupId = productionGroupId;
+
+  const { data } = await axios.get<Product[]>("/api/products", { params });
+  return data;
 }
 
 async function fetchSectors(): Promise<Sector[]> {
-  const res = await fetch("/api/catalog/sectors");
-  if (!res.ok) throw new Error("Sektörler yüklenemedi");
-  return res.json();
+  const { data } = await axios.get<Sector[]>("/api/catalog/sectors");
+  return data;
 }
 
 async function fetchGroups(
   sectorId: string
-): Promise<{ groups: { groupId: string; name: string }[] }> {
-  const res = await fetch(`/api/catalog/options?sectorId=${sectorId}`);
-  if (!res.ok) throw new Error("Üretim grupları yüklenemedi");
-  return res.json();
+): Promise<{ groups: ProductionGroup[] }> {
+  if (!sectorId || sectorId === "all") return { groups: [] };
+  const { data } = await axios.get<{ groups: ProductionGroup[] }>(
+    "/api/catalog/options",
+    { params: { sectorId } }
+  );
+  return data;
 }
 
 async function fetchProductAssignments(productId: string) {
-  const res = await fetch(`/api/productAssignments?productId=${productId}`);
-  if (!res.ok) throw new Error("Atamalar yüklenemedi");
-  return res.json();
+  const { data } = await axios.get("/api/productAssignments", {
+    params: { productId },
+  });
+  return data;
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                 COMPONENT                                  */
+/*                                 FORM TYPE                                  */
 /* -------------------------------------------------------------------------- */
+
+type ProductFormValues = {
+  name: string;
+  description: string;
+  imageUrl: string;
+  assignments: Assignment[];
+};
 
 export default function ProductsAdminPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Blob states
-  const [uploading, setUploading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
+  // --- FILTERS STATE ---
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch] = useDebounce(searchTerm, 500);
+  const [selectedSector, setSelectedSector] = useState("all");
+  const [selectedGroup, setSelectedGroup] = useState("all");
 
-  // Dialog states
+  // --- MODAL & FORM STATE ---
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
-  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
 
-  // Form states
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    imageUrl: "",
+  // --- IMAGE UPLOAD STATE ---
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
+  const [removeImageFlag, setRemoveImageFlag] = useState(false);
+
+  // --- RHF SETUP ---
+  const form = useForm<ProductFormValues>({
+    defaultValues: {
+      name: "",
+      description: "",
+      imageUrl: "",
+      assignments: [{ sectorId: "", productionGroupId: "" }],
+    },
   });
 
-  const [assignments, setAssignments] = useState<Assignment[]>([
-    { sectorId: "", productionGroupId: "" },
-  ]);
+  const { register, handleSubmit, reset, setValue, watch, control } = form;
 
-  // Clean up object URLs to avoid memory leaks
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "assignments",
+  });
+
+  // Clean up preview blob URLs
   useEffect(() => {
     return () => {
       if (previewUrl && previewUrl.startsWith("blob:")) {
@@ -150,381 +194,558 @@ export default function ProductsAdminPage() {
     };
   }, [previewUrl]);
 
-  /* ---------------------------- QUERIES ---------------------------- */
+  /* ---------------------------- DATA FETCHING ---------------------------- */
 
-  const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["products"],
-    queryFn: fetchProducts,
-  });
-
+  // 1. Fetch SECTORS first (needed for filters)
   const { data: sectors = [] } = useQuery({
     queryKey: ["sectors"],
     queryFn: fetchSectors,
   });
 
+  // 2. Fetch GROUPS for filter (dependent on selectedSector)
+  const { data: filterGroupsData } = useQuery({
+    queryKey: ["filterGroups", selectedSector],
+    queryFn: () => fetchGroups(selectedSector),
+    enabled: selectedSector !== "all",
+  });
+  const filterGroups = filterGroupsData?.groups || [];
+
+  // Reset group filter if sector changes
+  useEffect(() => {
+    setSelectedGroup("all");
+  }, [selectedSector]);
+
+  // 3. Fetch PRODUCTS (dependent on filters)
+  const { data: products = [], isLoading: productsLoading } = useQuery({
+    queryKey: ["products", debouncedSearch, selectedSector, selectedGroup],
+    queryFn: () =>
+      fetchProducts(debouncedSearch, selectedSector, selectedGroup),
+    placeholderData: (previousData) => previousData,
+  });
+
   /* --------------------------- MUTATIONS --------------------------- */
 
+  // Note: createMutation is mostly used for "New Product" without image
+  // or as part of the flow. We'll simplify the usage in onSubmit.
   const createMutation = useMutation({
-    mutationFn: async (data: {
+    mutationFn: async (payload: {
       name: string;
       description: string;
       imageUrl: string;
       assignments: Assignment[];
     }) => {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Ürün oluşturulamadı");
-      }
-      return res.json();
+      const { data } = await axios.post("/api/products", payload);
+      return data;
     },
     onSuccess: () => {
       toast.success("Ürün başarıyla oluşturuldu");
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      resetForm();
-      setIsCreateOpen(false);
+      closeDialogAndReset();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (e: any) => {
+      const msg = e.response?.data?.error || e.message;
+      toast.error(msg);
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: async (data: {
+    mutationFn: async (payload: {
       productId: string;
       name: string;
       description: string;
       imageUrl: string;
       assignments: Assignment[];
     }) => {
-      const res = await fetch("/api/products", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Ürün güncellenemedi");
-      }
-      return res.json();
+      const { data } = await axios.put("/api/products", payload);
+      return data;
     },
     onSuccess: () => {
       toast.success("Ürün başarıyla güncellendi");
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      resetForm();
-      setEditingProduct(null);
+      closeDialogAndReset();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (e: any) => {
+      const msg = e.response?.data?.error || e.message;
+      toast.error(msg);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (product: Product) => {
-      // 1. Delete image if exists
+      // 1) S3 görsel sil (varsa)
       if (product.imageUrl) {
-        try {
-          await fetch(
-            `/api/products/upload?url=${encodeURIComponent(product.imageUrl)}`,
-            {
-              method: "DELETE",
-            }
-          );
-        } catch (e) {
-          console.error("Image deletion failed", e);
-        }
+        await axios
+          .delete("/api/products/upload", {
+            params: { url: product.imageUrl },
+          })
+          .catch(() => {});
       }
-
-      // 2. Delete product
-      const res = await fetch(`/api/products?productId=${product._id}`, {
-        method: "DELETE",
+      // 2) Product sil
+      const { data } = await axios.delete("/api/products", {
+        params: { productId: product._id },
       });
-      if (!res.ok) throw new Error("Ürün silinemedi");
-      return res.json();
+      return data;
     },
     onSuccess: () => {
       toast.success("Ürün silindi");
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setDeletingProduct(null);
     },
-    onError: () => {
-      toast.error("Silme işlemi başarısız");
+    onError: (e: any) => {
+      const msg = e.response?.data?.error || "Silme işlemi başarısız";
+      toast.error(msg);
     },
   });
 
   /* --------------------------- HELPERS --------------------------- */
 
-  const resetForm = () => {
-    setFormData({ name: "", description: "", imageUrl: "" });
-    setAssignments([{ sectorId: "", productionGroupId: "" }]);
+  const isDialogOpen = isCreateOpen || !!editingProduct;
+  const isPending =
+    uploading || createMutation.isPending || updateMutation.isPending;
+
+  const closeDialogAndReset = () => {
+    setIsCreateOpen(false);
+    setEditingProduct(null);
+
+    reset({
+      name: "",
+      description: "",
+      imageUrl: "",
+      assignments: [{ sectorId: "", productionGroupId: "" }],
+    });
+
     setSelectedFile(null);
     setPreviewUrl("");
     setOriginalImageUrl(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    setRemoveImageFlag(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const openCreateDialog = () => {
+    setEditingProduct(null);
+    closeDialogAndReset();
+    setIsCreateOpen(true);
   };
 
   const openEditDialog = async (product: Product) => {
-    setFormData({
+    setEditingProduct(product);
+    setIsCreateOpen(false);
+
+    setOriginalImageUrl(product.imageUrl || null);
+    setRemoveImageFlag(false);
+
+    reset({
       name: product.name,
       description: product.description || "",
       imageUrl: product.imageUrl || "",
+      assignments: [{ sectorId: "", productionGroupId: "" }],
     });
-    setPreviewUrl(product.imageUrl || "");
-    setOriginalImageUrl(product.imageUrl || null);
-    setSelectedFile(null);
 
-    // Fetch existing assignments
+    setPreviewUrl(product.imageUrl || "");
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // Assignments load
     try {
+      // Using helper which now uses axios
       const data = await fetchProductAssignments(product._id);
-      const existingAssignments = data.assignments.map((a: any) => ({
+      const existing: Assignment[] = (data.assignments || []).map((a: any) => ({
         sectorId: a.sectorId?._id || a.sectorId,
         productionGroupId: a.productionGroupId?._id || a.productionGroupId,
       }));
-      setAssignments(
-        existingAssignments.length > 0
-          ? existingAssignments
-          : [{ sectorId: "", productionGroupId: "" }]
+
+      setValue(
+        "assignments",
+        existing.length ? existing : [{ sectorId: "", productionGroupId: "" }],
+        { shouldDirty: false }
       );
     } catch {
-      setAssignments([{ sectorId: "", productionGroupId: "" }]);
+      setValue("assignments", [{ sectorId: "", productionGroupId: "" }], {
+        shouldDirty: false,
+      });
     }
-
-    setEditingProduct(product);
   };
 
-  const handleSubmit = async () => {
-    // Filter out incomplete assignments
-    const validAssignments = assignments.filter(
-      (a) => a.sectorId && a.productionGroupId
-    );
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    if (!formData.name.trim()) {
+    setSelectedFile(file);
+    setRemoveImageFlag(false);
+    const objUrl = URL.createObjectURL(file);
+    setPreviewUrl(objUrl);
+  };
+
+  const removeImageUI = () => {
+    setSelectedFile(null);
+    setPreviewUrl("");
+    setValue("imageUrl", "", { shouldDirty: true });
+    setRemoveImageFlag(true);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // UPLOAD logic
+  async function uploadToS3(file: File, productId: string): Promise<string> {
+    if (!productId) throw new Error("productId is required for upload");
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("productId", productId);
+
+    const { data } = await axios.post("/api/products/upload", fd);
+    return data.url;
+  }
+
+  // DELETE logic
+  async function deleteFromS3ByUrl(url: string) {
+    await axios.delete("/api/products/upload", {
+      params: { url },
+    });
+  }
+
+  // SUBMIT
+  const onSubmit = async (values: ProductFormValues) => {
+    // 1. Validation
+    if (!values.name?.trim()) {
       toast.error("Ürün adı zorunludur");
       return;
     }
-
+    const validAssignments = (values.assignments || []).filter(
+      (a) => a.sectorId && a.productionGroupId
+    );
     if (validAssignments.length === 0) {
       toast.error("En az bir sektör ve üretim grubu seçilmelidir");
       return;
     }
 
-    let finalImageUrl = formData.imageUrl;
+    let finalImageUrl = values.imageUrl || "";
 
-    // 1. Upload logic (if file selected)
-    if (selectedFile) {
-      setUploading(true);
+    // NEW PRODUCT
+    if (!editingProduct) {
       try {
-        const newBlob = await upload(selectedFile.name, selectedFile, {
-          access: "public",
-          handleUploadUrl: "/api/products/upload",
+        // 1. Create Product (without image initially)
+        const { data } = await axios.post("/api/products", {
+          name: values.name.trim(),
+          description: values.description?.trim() || "",
+          imageUrl: "",
+          assignments: validAssignments,
         });
-        finalImageUrl = newBlob.url;
-      } catch (error) {
-        console.error("Upload failed", error);
-        toast.error("Görsel yüklenemedi");
-        setUploading(false);
-        return;
-      }
-      setUploading(false);
-    }
 
-    // 2. CHECK & DELETE OLD IMAGE
-    // If we are editing, and there was an original image,
-    // and the new finalImageUrl is different (either empty or a new uploaded one)
-    if (
-      editingProduct &&
-      originalImageUrl &&
-      originalImageUrl !== finalImageUrl
-    ) {
-      try {
-        await fetch(
-          `/api/products/upload?url=${encodeURIComponent(originalImageUrl)}`,
-          {
-            method: "DELETE",
+        const newProduct = data.product;
+
+        // 2. If file selected, upload and then update product
+        if (selectedFile) {
+          setUploading(true);
+          try {
+            const url = await uploadToS3(selectedFile, newProduct._id);
+
+            // Update product with the new Image URL
+            await axios.put("/api/products", {
+              productId: newProduct._id,
+              imageUrl: url,
+            });
+            toast.success("Ürün ve görsel başarıyla oluşturuldu");
+          } catch (e: any) {
+            console.error(e);
+            toast.error(
+              "Ürün oluştu fakat görsel yüklenemedi: " +
+                (e.response?.data?.error || e.message)
+            );
           }
-        );
-        console.log("Old image deleted:", originalImageUrl);
-      } catch (error) {
-        console.error("Failed to delete old image:", error);
-        // We continue even if delete fails, to not block the product update
+          setUploading(false);
+        } else {
+          toast.success("Ürün başarıyla oluşturuldu");
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["products"] });
+        closeDialogAndReset();
+      } catch (err: any) {
+        const msg = err.response?.data?.error || "Ürün oluşturulamadı";
+        toast.error(msg);
       }
-    }
-
-    // 3. Mutation logic
-    if (editingProduct) {
-      updateMutation.mutate({
-        productId: editingProduct._id,
-        ...formData,
-        imageUrl: finalImageUrl,
-        assignments: validAssignments,
-      });
-    } else {
-      createMutation.mutate({
-        ...formData,
-        imageUrl: finalImageUrl,
-        assignments: validAssignments,
-      });
-    }
-  };
-
-  const addAssignment = () => {
-    setAssignments([...assignments, { sectorId: "", productionGroupId: "" }]);
-  };
-
-  const removeAssignment = (index: number) => {
-    if (assignments.length > 1) {
-      setAssignments(assignments.filter((_, i) => i !== index));
-    }
-  };
-
-  const updateAssignment = (
-    index: number,
-    field: keyof Assignment,
-    value: string
-  ) => {
-    const updated = [...assignments];
-    updated[index] = { ...updated[index], [field]: value };
-
-    // Reset productionGroupId if sectorId changes
-    if (field === "sectorId") {
-      updated[index].productionGroupId = "";
-    }
-
-    setAssignments(updated);
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) {
       return;
     }
 
-    const file = e.target.files[0];
-    setSelectedFile(file);
+    // EDITING PRODUCT
+    if (editingProduct) {
+      // 1. Upload if new file
+      if (selectedFile) {
+        setUploading(true);
+        try {
+          finalImageUrl = await uploadToS3(selectedFile, editingProduct._id);
+        } catch (e: any) {
+          setUploading(false);
+          toast.error(
+            e.response?.data?.error || e.message || "Görsel yüklenemedi"
+          );
+          return;
+        }
+        setUploading(false);
+      }
 
-    // Create local preview
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
-  };
+      // 2. Delete old if necessary
+      const shouldDeleteOld =
+        !!originalImageUrl &&
+        (removeImageFlag ||
+          (finalImageUrl && finalImageUrl !== originalImageUrl));
 
-  const removeImage = () => {
-    setFormData((prev) => ({ ...prev, imageUrl: "" }));
-    setSelectedFile(null);
-    setPreviewUrl("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      // 3. Update
+      updateMutation.mutate(
+        {
+          productId: editingProduct._id,
+          name: values.name.trim(),
+          description: values.description?.trim() || "",
+          imageUrl: removeImageFlag ? "" : finalImageUrl,
+          assignments: validAssignments,
+        },
+        {
+          onSuccess: async () => {
+            if (shouldDeleteOld && originalImageUrl) {
+              try {
+                await deleteFromS3ByUrl(originalImageUrl);
+              } catch (e) {}
+            }
+          },
+        }
+      );
     }
   };
 
-  /* --------------------------- RENDER --------------------------- */
-
-  const isDialogOpen = isCreateOpen || !!editingProduct;
-  const isPending =
-    createMutation.isPending || updateMutation.isPending || uploading;
+  /* -------------------------------------------------------------------------- */
+  /*                                   RENDER                                   */
+  /* -------------------------------------------------------------------------- */
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Ürün Yönetimi</h1>
-          <p className="text-muted-foreground">
-            Ürünleri oluşturun, düzenleyin ve silin.
-          </p>
+    <div className="min-h-screen bg-gray-50/50 p-6 md:p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
+              Ürün Yönetimi
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Kataloğunuzdaki ürünleri filtreleyin, düzenleyin ve yönetin.
+            </p>
+          </div>
+          <Button onClick={openCreateDialog} size="lg" className="shadow-sm">
+            <Plus className="w-5 h-5 mr-2" />
+            Yeni Ürün Ekle
+          </Button>
         </div>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Yeni Ürün
-        </Button>
+
+        {/* FILTERS CARD */}
+        <Card className="shadow-sm border-none bg-white">
+          <CardContent className="p-4 md:p-6 grid gap-4 md:grid-cols-4 items-center">
+            {/* Search */}
+            <div className="relative md:col-span-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+              <Input
+                placeholder="Ürün adı ara..."
+                className="pl-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+
+            {/* Sector Filter */}
+            <div className="md:col-span-1">
+              <Select value={selectedSector} onValueChange={setSelectedSector}>
+                <SelectTrigger className="bg-gray-50 border-gray-200">
+                  <div className="flex items-center gap-2 truncate">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <SelectValue placeholder="Sektör Seç" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm Sektörler</SelectItem>
+                  {sectors.map((s) => (
+                    <SelectItem key={s._id} value={s._id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Group Filter (Cascading) */}
+            <div className="md:col-span-1">
+              <Select
+                value={selectedGroup}
+                onValueChange={setSelectedGroup}
+                disabled={selectedSector === "all"}
+              >
+                <SelectTrigger className="bg-gray-50 border-gray-200">
+                  <div className="flex items-center gap-2 truncate">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <SelectValue placeholder="Üretim Grubu Seç" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tüm Gruplar</SelectItem>
+                  {filterGroups.map((g) => (
+                    <SelectItem key={g.groupId} value={g.groupId}>
+                      {g.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Clear Filters */}
+            <div className="flex justify-end md:justify-start">
+              {(searchTerm ||
+                selectedSector !== "all" ||
+                selectedGroup !== "all") && (
+                <Button
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setSelectedSector("all");
+                    setSelectedGroup("all");
+                  }}
+                >
+                  <XCircle className="w-4 h-4 mr-2" />
+                  Filtreleri Temizle
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* PRODUCTS LIST */}
+        <Card className="shadow-md border border-gray-100 overflow-hidden">
+          <CardHeader className="bg-white border-b border-gray-100 pb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl">Ürün Listesi</CardTitle>
+                <CardDescription className="mt-1">
+                  Bulunan toplam ürün:{" "}
+                  <span className="font-medium text-foreground">
+                    {products.length}
+                  </span>
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-0">
+            {productsLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white">
+                <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+                <p className="text-muted-foreground">Ürünler yükleniyor...</p>
+              </div>
+            ) : products.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50">
+                <Search className="w-12 h-12 text-gray-300 mb-4" />
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Ürün bulunamadı
+                </h3>
+                <p className="text-muted-foreground max-w-sm text-center mt-2">
+                  Arama kriterlerinize uygun ürün yok veya henüz hiç ürün
+                  eklemediniz.
+                </p>
+                <Button
+                  variant="link"
+                  className="mt-4"
+                  onClick={() => {
+                    setSearchTerm("");
+                    setSelectedSector("all");
+                    setSelectedGroup("all");
+                  }}
+                >
+                  Filtreleri Temizle
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-gray-50">
+                    <TableRow>
+                      <TableHead className="w-[80px]">Görsel</TableHead>
+                      <TableHead>Id</TableHead>
+                      <TableHead>Ürün Adı</TableHead>
+                      <TableHead className="hidden md:table-cell">
+                        Açıklama
+                      </TableHead>
+                      <TableHead className="text-right">İşlemler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <AnimatePresence>
+                      {products.map((p) => (
+                        <motion.tr
+                          key={p._id}
+                          initial={{ opacity: 0, y: 5 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="group hover:bg-gray-50/80 transition-colors border-b last:border-0"
+                        >
+                          <TableCell className="py-3">
+                            {p.imageUrl ? (
+                              <div className="relative w-12 h-12 rounded-md overflow-hidden border border-gray-200 shadow-sm">
+                                <Image
+                                  src={p.imageUrl}
+                                  alt={p.name}
+                                  fill
+                                  className="object-cover"
+                                  sizes="48px"
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center text-xs text-gray-400 font-medium">
+                                YOK
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-semibold text-gray-800">
+                            {p._id}
+                          </TableCell>
+                          <TableCell className="font-semibold text-gray-800">
+                            {p.name}
+                          </TableCell>
+                          <TableCell className="hidden md:table-cell text-muted-foreground max-w-md truncate">
+                            {p.description || "-"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => openEditDialog(p)}
+                              >
+                                <span className="sr-only">Düzenle</span>
+                                <Pencil className="h-4 w-4 text-blue-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => setDeletingProduct(p)}
+                              >
+                                <span className="sr-only">Sil</span>
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Products Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ürünler</CardTitle>
-          <CardDescription>
-            Toplam {products.length} ürün bulundu.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {productsLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin" />
-            </div>
-          ) : products.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Henüz ürün eklenmemiş.
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ad</TableHead>
-                  <TableHead>Açıklama</TableHead>
-                  <TableHead>Görsel</TableHead>
-                  <TableHead className="text-right">İşlemler</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product._id}>
-                    <TableCell className="font-medium">
-                      {product.name}
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {product.description || "-"}
-                    </TableCell>
-                    <TableCell>
-                      {product.imageUrl ? (
-                        <div className="flex items-center space-x-2">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="w-10 h-10 object-cover rounded-md border"
-                          />
-                        </div>
-                      ) : (
-                        <Badge variant="secondary">Yok</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => openEditDialog(product)}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => setDeletingProduct(product)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Create/Edit Dialog */}
+      {/* CREATE / EDIT DIALOG */}
       <Dialog
         open={isDialogOpen}
         onOpenChange={(open) => {
-          if (!open) {
-            setIsCreateOpen(false);
-            setEditingProduct(null);
-            resetForm();
-          }
+          if (!open) closeDialogAndReset();
         }}
       >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -533,164 +754,166 @@ export default function ProductsAdminPage() {
               {editingProduct ? "Ürün Düzenle" : "Yeni Ürün Ekle"}
             </DialogTitle>
             <DialogDescription>
-              Ürün bilgilerini ve hangi sektör/üretim gruplarına ait olduğunu
-              belirleyin.
+              Ürün detaylarını girin. Görsel yüklemek için önce ürünü oluşturun
+              (otomatik yapılır).
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6 py-4">
-            {/* Basic Info */}
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Ürün Adı *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="Örn: PVC Boru"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="description">Açıklama</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Ürün açıklaması..."
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label>Ürün Görseli</Label>
-                <div className="mt-2 space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
+            <div className="grid gap-6">
+              {/* Image Upload Area */}
+              <div className="flex justify-center">
+                <div className="space-y-3 w-full max-w-xs text-center">
+                  <Label>Ürün Görseli</Label>
                   {previewUrl ? (
-                    <div className="relative w-full max-w-xs aspect-video bg-muted rounded-lg overflow-hidden border">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                    <div className="relative aspect-square w-full rounded-xl overflow-hidden border shadow-sm group">
+                      <Image
                         src={previewUrl}
                         alt="Preview"
-                        className="w-full h-full object-cover"
+                        fill
+                        className="object-cover"
                       />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-2 right-2 h-8 w-8"
-                        onClick={removeImage}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center w-full max-w-xs aspect-video bg-muted/50 rounded-lg border border-dashed">
-                      <div className="text-center p-4">
-                        <Upload className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
-                        <p className="text-sm text-muted-foreground">
-                          Görsel yüklemek için seçin
-                        </p>
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={removeImageUI}
+                          disabled={uploading}
+                        >
+                          <X className="w-4 h-4 mr-2" />
+                          Görseli Kaldır
+                        </Button>
                       </div>
                     </div>
+                  ) : (
+                    <div
+                      className="aspect-square w-full rounded-xl border-2 border-dashed border-gray-200 hover:border-primary/50 transition-colors flex flex-col items-center justify-center bg-gray-50/50 cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <Upload className="w-10 h-10 text-gray-400 mb-2" />
+                      <p className="text-sm font-medium text-gray-600">
+                        Görsel Yükle
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        PNG, JPG (Max 5MB)
+                      </p>
+                    </div>
                   )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  {uploading && (
+                    <p className="text-xs text-blue-600 flex items-center justify-center font-medium animate-pulse">
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Yükleniyor...
+                    </p>
+                  )}
+                  {/* Hidden input for RHF */}
+                  <input type="hidden" {...register("imageUrl")} />
+                </div>
+              </div>
 
-                  <div className="flex items-center gap-2">
-                    <Input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileSelect}
-                      disabled={uploading}
-                      className="cursor-pointer"
+              {/* Inputs */}
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Ürün Adı *</Label>
+                  <Input
+                    id="name"
+                    placeholder="Örn: PVC Boru"
+                    {...register("name")}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="description">Açıklama</Label>
+                  <Textarea
+                    id="description"
+                    rows={3}
+                    placeholder="Ürün hakkında kısa bilgi..."
+                    {...register("description")}
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Assignments */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <Label className="text-base font-semibold">
+                    Kategori Atamaları
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      append({ sectorId: "", productionGroupId: "" })
+                    }
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Kategori Ekle
+                  </Button>
+                </div>
+
+                <div className="space-y-3">
+                  {fields.map((f, index) => (
+                    <AssignmentRowRHF
+                      key={f.id}
+                      index={index}
+                      sectors={sectors}
+                      removeRow={() => remove(index)}
+                      canRemove={fields.length > 1}
+                      form={form}
                     />
-                    {uploading && (
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    )}
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
 
-            {/* Assignments */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>Sektör / Üretim Grubu Atamaları *</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addAssignment}
-                >
-                  <Plus className="w-4 h-4 mr-1" />
-                  Başka Ekle
-                </Button>
-              </div>
-
-              {assignments.map((assignment, index) => (
-                <AssignmentRow
-                  key={index}
-                  assignment={assignment}
-                  sectors={sectors}
-                  index={index}
-                  onUpdate={updateAssignment}
-                  onRemove={removeAssignment}
-                  canRemove={assignments.length > 1}
-                />
-              ))}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsCreateOpen(false);
-                setEditingProduct(null);
-                resetForm();
-              }}
-            >
-              İptal
-            </Button>
-            <Button onClick={handleSubmit} disabled={isPending}>
-              {uploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Yükleniyor...
-                </>
-              ) : isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : null}
-
-              {editingProduct ? "Güncelle" : "Oluştur"}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeDialogAndReset}
+              >
+                İptal
+              </Button>
+              <Button type="submit" disabled={isPending}>
+                {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {editingProduct ? "Değişiklikleri Kaydet" : "Ürünü Oluştur"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* DELETE ALERT */}
       <AlertDialog
         open={!!deletingProduct}
         onOpenChange={() => setDeletingProduct(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Ürünü sil?</AlertDialogTitle>
+            <AlertDialogTitle>Emin misiniz?</AlertDialogTitle>
             <AlertDialogDescription>
-              <strong>{deletingProduct?.name}</strong> ürünü ve tüm sektör/grup
-              atamaları kalıcı olarak silinecek. Bu işlem geri alınamaz.
+              <strong>{deletingProduct?.name}</strong> ürünü silinecek. Buna
+              bağlı tüm kategori atamaları da kaldırılacak. Bu işlem geri
+              alınamaz.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
             <AlertDialogAction
               onClick={() =>
                 deletingProduct && deleteMutation.mutate(deletingProduct)
               }
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive hover:bg-destructive/90"
             >
               {deleteMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -706,70 +929,82 @@ export default function ProductsAdminPage() {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                           ASSIGNMENT ROW COMPONENT                         */
+/*                           SUB-COMPONENTS                                   */
 /* -------------------------------------------------------------------------- */
 
-interface AssignmentRowProps {
-  assignment: Assignment;
-  sectors: Sector[];
-  index: number;
-  onUpdate: (index: number, field: keyof Assignment, value: string) => void;
-  onRemove: (index: number) => void;
-  canRemove: boolean;
-}
-
-function AssignmentRow({
-  assignment,
-  sectors,
+function AssignmentRowRHF({
   index,
-  onUpdate,
-  onRemove,
+  sectors,
   canRemove,
-}: AssignmentRowProps) {
-  // Fetch groups for selected sector
+  removeRow,
+  form,
+}: {
+  index: number;
+  sectors: Sector[];
+  canRemove: boolean;
+  removeRow: () => void;
+  form: ReturnType<typeof useForm<ProductFormValues>>;
+}) {
+  const sectorId = form.watch(`assignments.${index}.sectorId`);
+
   const { data: groupsData } = useQuery({
-    queryKey: ["groups", assignment.sectorId],
-    queryFn: () => fetchGroups(assignment.sectorId),
-    enabled: !!assignment.sectorId,
+    queryKey: ["groups", sectorId],
+    queryFn: () => fetchGroups(sectorId),
+    enabled: !!sectorId,
   });
 
-  const groups = groupsData?.groups || [];
+  const groups = useMemo(() => groupsData?.groups || [], [groupsData]);
 
   return (
-    <div className="flex items-end gap-3 p-3 border rounded-lg bg-muted/30">
-      <div className="flex-1">
-        <Label className="text-xs">Sektör</Label>
+    <div className="flex flex-col sm:flex-row gap-3 p-3 rounded-lg border bg-gray-50/50 items-start sm:items-end">
+      <div className="w-full sm:flex-1">
+        <Label className="text-xs text-muted-foreground mb-1.5 block">
+          Sektör
+        </Label>
         <Select
-          value={assignment.sectorId}
-          onValueChange={(val) => onUpdate(index, "sectorId", val)}
+          value={sectorId || ""}
+          onValueChange={(val) => {
+            form.setValue(`assignments.${index}.sectorId`, val, {
+              shouldDirty: true,
+            });
+            form.setValue(`assignments.${index}.productionGroupId`, "", {
+              shouldDirty: true,
+            });
+          }}
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Sektör seç..." />
+          <SelectTrigger className="bg-white">
+            <SelectValue placeholder="Sektör Seç" />
           </SelectTrigger>
           <SelectContent>
-            {sectors.map((sector) => (
-              <SelectItem key={sector._id} value={sector._id}>
-                {sector.name}
+            {sectors.map((s) => (
+              <SelectItem key={s._id} value={s._id}>
+                {s.name}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="flex-1">
-        <Label className="text-xs">Üretim Grubu</Label>
+      <div className="w-full sm:flex-1">
+        <Label className="text-xs text-muted-foreground mb-1.5 block">
+          Üretim Grubu
+        </Label>
         <Select
-          value={assignment.productionGroupId}
-          onValueChange={(val) => onUpdate(index, "productionGroupId", val)}
-          disabled={!assignment.sectorId}
+          value={form.watch(`assignments.${index}.productionGroupId`) || ""}
+          onValueChange={(val) =>
+            form.setValue(`assignments.${index}.productionGroupId`, val, {
+              shouldDirty: true,
+            })
+          }
+          disabled={!sectorId}
         >
-          <SelectTrigger>
-            <SelectValue placeholder="Grup seç..." />
+          <SelectTrigger className="bg-white">
+            <SelectValue placeholder="Grup Seç" />
           </SelectTrigger>
           <SelectContent>
-            {groups.map((group) => (
-              <SelectItem key={group.groupId} value={group.groupId}>
-                {group.name}
+            {groups.map((g) => (
+              <SelectItem key={g.groupId} value={g.groupId}>
+                {g.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -781,8 +1016,8 @@ function AssignmentRow({
           type="button"
           variant="ghost"
           size="icon"
-          onClick={() => onRemove(index)}
-          className="text-destructive"
+          className="text-muted-foreground hover:text-destructive shrink-0"
+          onClick={removeRow}
         >
           <Trash2 className="w-4 h-4" />
         </Button>
