@@ -1,26 +1,15 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/Providers";
 import { Toaster } from "@/components/ui/sonner";
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
   subsets: ["latin"],
+  variable: "--font-sans",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Ceyhunlar Plastik",
@@ -39,10 +28,8 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider afterSignOutUrl="/sign-in">
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
+      <html lang="tr">
+        <body className={`${inter.variable} font-sans antialiased`}>
           <Providers>
             {children}
             <Toaster />

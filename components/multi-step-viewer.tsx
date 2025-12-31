@@ -111,10 +111,17 @@ export const PreviousButton = ({
   );
 }; */
 
-export const NextButton = ({ children, className, ...props }: ButtonProps) => {
-  const { nextStep, isLastStep, isFirstStep } = useMultiStepViewer();
+export const NextButton = ({
+  children,
+  className,
+  hideOnSteps,
+  ...props
+}: ButtonProps & { hideOnSteps?: number[] }) => {
+  const { nextStep, isLastStep, isFirstStep, currentStep } =
+    useMultiStepViewer();
 
   if (isLastStep) return null;
+  if (hideOnSteps?.includes(currentStep)) return null;
 
   return (
     <Button

@@ -8,7 +8,7 @@ export const sectors = [
         image: "/gym.jpg"
     },
     {
-        name: "Makine",
+        name: "Makine Sanayi",
         image: "/machine.jpg"
     },
     {
@@ -26,6 +26,14 @@ export const sectors = [
     {
         name: "Ev Ürünleri",
         image: "/home.jpg"
+    },
+    {
+        name: "Endüstriyel Mutfak",
+        image: "/kitchen.jpg"
+    },
+    {
+        name: "Medikal",
+        image: "/medical.jpg"
     }
 ];
 

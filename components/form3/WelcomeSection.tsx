@@ -25,8 +25,9 @@ export const WelcomeSection = () => {
         </div>
 
         {/* Ana Başlık */}
-        <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-zinc-800 dark:text-white mb-1">
-          Ceyhunlar Plastik
+        <h1 className="text-xl md:text-2xl lg:text-2xl font-bold text-zinc-800 dark:text-white mb-1">
+          {/* Ceyhunlar Plastik */}
+          CEYHUNLAR PLASTİK SANAYİ VE TİCARET LİMİTED ŞİRKETİ
         </h1>
 
         {/* Alt Başlık - Altın rengi ve çizgiler */}

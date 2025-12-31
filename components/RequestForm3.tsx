@@ -368,7 +368,7 @@ export default function RequestForm3() {
                   <ChevronLeft className="w-4 h-4" /> Geri
                 </PreviousButton>
 
-                <NextButton>
+                <NextButton hideOnSteps={[1]}>
                   İleri <ChevronRight className="w-4 h-4" />
                 </NextButton>
 

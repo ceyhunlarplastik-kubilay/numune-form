@@ -14,10 +14,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 import { CheckCircle2 } from "lucide-react";
 
 import { FormSectionStickyWrapper } from "@/components/form3/form-section/FormSectionStickyWrapper";
 import { getSectorImage } from "@/constants/sectors";
+import { useMultiStepViewer } from "@/hooks/use-multi-step-viewer";
 
 interface SectorFormSectionProps {
   form: any;
@@ -28,6 +30,7 @@ export const SectorFormSection = ({
   form,
   sectors,
 }: SectorFormSectionProps) => {
+  const { nextStep } = useMultiStepViewer();
   const OTHER_NAME = "Diğerleri";
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +75,7 @@ export const SectorFormSection = ({
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid} className="space-y-4">
               {/* SEKTÖRLER GRID */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {sectorData.map((sector) => {
                   const isSelected = field.value === sector.id;
 
@@ -86,10 +89,17 @@ export const SectorFormSection = ({
                           ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/30"
                           : ""
                       )}
-                      onClick={() => field.onChange(sector.id)}
+                      onClick={() => {
+                        field.onChange(sector.id);
+                        // Auto-advance after selection
+                        setTimeout(() => nextStep(), 150);
+                      }}
                     >
-                      <CardHeader>
-                        <div className="relative w-full h-40 rounded-md overflow-hidden">
+                      <CardHeader className="p-4">
+                        <AspectRatio
+                          ratio={1 / 1}
+                          className="relative rounded-md overflow-hidden mb-2"
+                        >
                           <Image
                             src={sector.image}
                             alt={sector.name}
@@ -98,15 +108,19 @@ export const SectorFormSection = ({
                             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                           />
                           {isSelected && (
-                            <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
-                              <CheckCircle2 className="text-primary w-10 h-10" />
+                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                              <CheckCircle2 className="text-white w-12 h-12 drop-shadow-md" />
                             </div>
                           )}
-                        </div>
+                        </AspectRatio>
 
-                        <CardTitle className="flex justify-between items-center">
+                        <CardTitle className="flex justify-between items-center text-lg">
                           {sector.name}
-                          {isSelected && <Badge>Seçildi</Badge>}
+                          {isSelected && (
+                            <Badge variant="secondary" className="ml-2">
+                              Seçildi
+                            </Badge>
+                          )}
                         </CardTitle>
                       </CardHeader>
 
@@ -129,10 +143,17 @@ export const SectorFormSection = ({
                       ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/30"
                       : ""
                   )}
-                  onClick={() => field.onChange("others")}
+                  onClick={() => {
+                    field.onChange("others");
+                    // Auto-advance after selection
+                    setTimeout(() => nextStep(), 150);
+                  }}
                 >
-                  <CardHeader>
-                    <div className="relative w-full h-40 rounded-md overflow-hidden">
+                  <CardHeader className="p-4">
+                    <AspectRatio
+                      ratio={1 / 1}
+                      className="relative rounded-md overflow-hidden mb-2"
+                    >
                       <Image
                         src="/others.jpg"
                         alt="Diğerleri"
@@ -140,8 +161,8 @@ export const SectorFormSection = ({
                         className="object-cover opacity-80"
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       />
-                    </div>
-                    <CardTitle>Diğerleri</CardTitle>
+                    </AspectRatio>
+                    <CardTitle className="text-lg">Diğerleri</CardTitle>
                   </CardHeader>
 
                   <CardContent>
