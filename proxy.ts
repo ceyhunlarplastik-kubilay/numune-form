@@ -25,13 +25,9 @@ export default clerkMiddleware(async (auth, req) => {
 
     // 3) Admin role kontrolü
     if (pathname.startsWith("/admin") && sessionClaims?.metadata?.role !== "admin") {
-        const redirectUrl = pathname + req.nextUrl.search;
-        const signInUrl = new URL("/sign-in", req.url);
-
-        signInUrl.searchParams.set("redirect_url", redirectUrl);
-
-        return NextResponse.redirect(signInUrl);
+        return NextResponse.redirect(new URL("/?unauthorized=1", req.url));
     }
+
 
     return NextResponse.next();
 });

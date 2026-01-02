@@ -1,6 +1,26 @@
+"use client";
+
 import RequestForm3 from "@/components/RequestForm3";
+import { useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function Home() {
+  const searchParams = useSearchParams();
+
+  const router = useRouter();
+
+  useEffect(() => {
+    const unauthorized = searchParams?.get("unauthorized");
+    if (unauthorized) {
+      toast.error("Yetkisiz Erişim", {
+        description: "Bu sayfaya erişim yetkiniz bulunmamaktadır.",
+      });
+      // URL'yi temizle
+      router.replace("/");
+    }
+  }, [searchParams, router]);
+
   return (
     <main
       className="flex min-h-screen flex-col items-center justify-center 
