@@ -5,8 +5,8 @@ import { requireAdmin } from "@/lib/auth";
 
 export async function DELETE() {
     try {
-        /* const authError = await requireAdmin();
-        if (authError) return authError; */
+        const authError = await requireAdmin();
+        if (authError) return authError;
 
         await connectDB();
 

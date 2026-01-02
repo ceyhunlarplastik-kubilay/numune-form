@@ -515,232 +515,229 @@ export default function ProductsAdminPage() {
   /* -------------------------------------------------------------------------- */
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-6 md:p-8">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
-              Ürün Yönetimi
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Kataloğunuzdaki ürünleri filtreleyin, düzenleyin ve yönetin.
-            </p>
-          </div>
-          <Button onClick={openCreateDialog} size="lg" className="shadow-sm">
-            <Plus className="w-5 h-5 mr-2" />
-            Yeni Ürün Ekle
-          </Button>
+    <>
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
+            Ürün Yönetimi
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Kataloğunuzdaki ürünleri filtreleyin, düzenleyin ve yönetin.
+          </p>
         </div>
-
-        {/* FILTERS CARD */}
-        <Card className="shadow-sm border-none bg-white">
-          <CardContent className="p-4 md:p-6 grid gap-4 md:grid-cols-4 items-center">
-            {/* Search */}
-            <div className="relative md:col-span-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-              <Input
-                placeholder="Ürün adı ara..."
-                className="pl-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-
-            {/* Sector Filter */}
-            <div className="md:col-span-1">
-              <Select value={selectedSector} onValueChange={setSelectedSector}>
-                <SelectTrigger className="bg-gray-50 border-gray-200">
-                  <div className="flex items-center gap-2 truncate">
-                    <Filter className="w-4 h-4 text-muted-foreground" />
-                    <SelectValue placeholder="Sektör Seç" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tüm Sektörler</SelectItem>
-                  {sectors.map((s) => (
-                    <SelectItem key={s._id} value={s._id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Group Filter (Cascading) */}
-            <div className="md:col-span-1">
-              <Select
-                value={selectedGroup}
-                onValueChange={setSelectedGroup}
-                disabled={selectedSector === "all"}
-              >
-                <SelectTrigger className="bg-gray-50 border-gray-200">
-                  <div className="flex items-center gap-2 truncate">
-                    <Filter className="w-4 h-4 text-muted-foreground" />
-                    <SelectValue placeholder="Üretim Grubu Seç" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tüm Gruplar</SelectItem>
-                  {filterGroups.map((g) => (
-                    <SelectItem key={g.groupId} value={g.groupId}>
-                      {g.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Clear Filters */}
-            <div className="flex justify-end md:justify-start">
-              {(searchTerm ||
-                selectedSector !== "all" ||
-                selectedGroup !== "all") && (
-                <Button
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedSector("all");
-                    setSelectedGroup("all");
-                  }}
-                >
-                  <XCircle className="w-4 h-4 mr-2" />
-                  Filtreleri Temizle
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* PRODUCTS LIST */}
-        <Card className="shadow-md border border-gray-100 overflow-hidden">
-          <CardHeader className="bg-white border-b border-gray-100 pb-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-xl">Ürün Listesi</CardTitle>
-                <CardDescription className="mt-1">
-                  Bulunan toplam ürün:{" "}
-                  <span className="font-medium text-foreground">
-                    {products.length}
-                  </span>
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-0">
-            {productsLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 bg-white">
-                <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
-                <p className="text-muted-foreground">Ürünler yükleniyor...</p>
-              </div>
-            ) : products.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50">
-                <Search className="w-12 h-12 text-gray-300 mb-4" />
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Ürün bulunamadı
-                </h3>
-                <p className="text-muted-foreground max-w-sm text-center mt-2">
-                  Arama kriterlerinize uygun ürün yok veya henüz hiç ürün
-                  eklemediniz.
-                </p>
-                <Button
-                  variant="link"
-                  className="mt-4"
-                  onClick={() => {
-                    setSearchTerm("");
-                    setSelectedSector("all");
-                    setSelectedGroup("all");
-                  }}
-                >
-                  Filtreleri Temizle
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader className="bg-gray-50">
-                    <TableRow>
-                      <TableHead className="w-[80px]">Görsel</TableHead>
-                      <TableHead>Id</TableHead>
-                      <TableHead>Ürün Adı</TableHead>
-                      <TableHead className="hidden md:table-cell">
-                        Açıklama
-                      </TableHead>
-                      <TableHead className="text-right">İşlemler</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <AnimatePresence>
-                      {products.map((p) => (
-                        <motion.tr
-                          key={p._id}
-                          initial={{ opacity: 0, y: 5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ duration: 0.2 }}
-                          className="group hover:bg-gray-50/80 transition-colors border-b last:border-0"
-                        >
-                          <TableCell className="py-3">
-                            {p.imageUrl ? (
-                              <div className="relative w-12 h-12 rounded-md overflow-hidden border border-gray-200 shadow-sm">
-                                <Image
-                                  src={p.imageUrl}
-                                  alt={p.name}
-                                  fill
-                                  className="object-cover"
-                                  sizes="48px"
-                                />
-                              </div>
-                            ) : (
-                              <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center text-xs text-gray-400 font-medium">
-                                YOK
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-semibold text-gray-800">
-                            {p._id}
-                          </TableCell>
-                          <TableCell className="font-semibold text-gray-800">
-                            {p.name}
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell text-muted-foreground max-w-md truncate">
-                            {p.description || "-"}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => openEditDialog(p)}
-                              >
-                                <span className="sr-only">Düzenle</span>
-                                <Pencil className="h-4 w-4 text-blue-600" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => setDeletingProduct(p)}
-                              >
-                                <span className="sr-only">Sil</span>
-                                <Trash2 className="h-4 w-4 text-red-600" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </motion.tr>
-                      ))}
-                    </AnimatePresence>
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <Button onClick={openCreateDialog} size="lg" className="shadow-sm">
+          <Plus className="w-5 h-5 mr-2" />
+          Yeni Ürün Ekle
+        </Button>
       </div>
 
+      {/* FILTERS CARD */}
+      <Card className="shadow-sm border-none bg-white">
+        <CardContent className="p-4 md:p-6 grid gap-4 md:grid-cols-4 items-center">
+          {/* Search */}
+          <div className="relative md:col-span-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Ürün adı ara..."
+              className="pl-9 bg-gray-50 border-gray-200 focus:bg-white transition-colors"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          {/* Sector Filter */}
+          <div className="md:col-span-1">
+            <Select value={selectedSector} onValueChange={setSelectedSector}>
+              <SelectTrigger className="bg-gray-50 border-gray-200">
+                <div className="flex items-center gap-2 truncate">
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                  <SelectValue placeholder="Sektör Seç" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tüm Sektörler</SelectItem>
+                {sectors.map((s) => (
+                  <SelectItem key={s._id} value={s._id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Group Filter (Cascading) */}
+          <div className="md:col-span-1">
+            <Select
+              value={selectedGroup}
+              onValueChange={setSelectedGroup}
+              disabled={selectedSector === "all"}
+            >
+              <SelectTrigger className="bg-gray-50 border-gray-200">
+                <div className="flex items-center gap-2 truncate">
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                  <SelectValue placeholder="Üretim Grubu Seç" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tüm Gruplar</SelectItem>
+                {filterGroups.map((g) => (
+                  <SelectItem key={g.groupId} value={g.groupId}>
+                    {g.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Clear Filters */}
+          <div className="flex justify-end md:justify-start">
+            {(searchTerm ||
+              selectedSector !== "all" ||
+              selectedGroup !== "all") && (
+              <Button
+                variant="ghost"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedSector("all");
+                  setSelectedGroup("all");
+                }}
+              >
+                <XCircle className="w-4 h-4 mr-2" />
+                Filtreleri Temizle
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* PRODUCTS LIST */}
+      <Card className="shadow-md border border-gray-100 overflow-hidden">
+        <CardHeader className="bg-white border-b border-gray-100 pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl">Ürün Listesi</CardTitle>
+              <CardDescription className="mt-1">
+                Bulunan toplam ürün:{" "}
+                <span className="font-medium text-foreground">
+                  {products.length}
+                </span>
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0">
+          {productsLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-white">
+              <Loader2 className="w-10 h-10 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Ürünler yükleniyor...</p>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-gray-50/50">
+              <Search className="w-12 h-12 text-gray-300 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900">
+                Ürün bulunamadı
+              </h3>
+              <p className="text-muted-foreground max-w-sm text-center mt-2">
+                Arama kriterlerinize uygun ürün yok veya henüz hiç ürün
+                eklemediniz.
+              </p>
+              <Button
+                variant="link"
+                className="mt-4"
+                onClick={() => {
+                  setSearchTerm("");
+                  setSelectedSector("all");
+                  setSelectedGroup("all");
+                }}
+              >
+                Filtreleri Temizle
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-gray-50">
+                  <TableRow>
+                    <TableHead className="w-[80px]">Görsel</TableHead>
+                    <TableHead>Id</TableHead>
+                    <TableHead>Ürün Adı</TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      Açıklama
+                    </TableHead>
+                    <TableHead className="text-right">İşlemler</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <AnimatePresence>
+                    {products.map((p) => (
+                      <motion.tr
+                        key={p._id}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="group hover:bg-gray-50/80 transition-colors border-b last:border-0"
+                      >
+                        <TableCell className="py-3">
+                          {p.imageUrl ? (
+                            <div className="relative w-12 h-12 rounded-md overflow-hidden border border-gray-200 shadow-sm">
+                              <Image
+                                src={p.imageUrl}
+                                alt={p.name}
+                                fill
+                                className="object-cover"
+                                sizes="48px"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded-md bg-gray-100 flex items-center justify-center text-xs text-gray-400 font-medium">
+                              YOK
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-semibold text-gray-800">
+                          {p._id}
+                        </TableCell>
+                        <TableCell className="font-semibold text-gray-800">
+                          {p.name}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground max-w-md truncate">
+                          {p.description || "-"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => openEditDialog(p)}
+                            >
+                              <span className="sr-only">Düzenle</span>
+                              <Pencil className="h-4 w-4 text-blue-600" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setDeletingProduct(p)}
+                            >
+                              <span className="sr-only">Sil</span>
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
       {/* CREATE / EDIT DIALOG */}
       <Dialog
         open={isDialogOpen}
@@ -924,7 +921,7 @@ export default function ProductsAdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
 
