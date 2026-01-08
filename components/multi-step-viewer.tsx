@@ -68,8 +68,32 @@ export const StepFields = () => {
   );
 };
 
-export const FormFooter = ({ children }: { children: React.ReactNode }) => {
-  return <div className="flex justify-between mt-6">{children}</div>;
+export const FormFooter = ({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) => {
+  const { currentStep } = useMultiStepViewer();
+
+  /**
+   * Step 0 → Welcome
+   * Step 1 → Sector
+   */
+  const isSingleCenteredStep = currentStep === 0 || currentStep === 1;
+
+  return (
+    <div
+      className={cn(
+        "mt-6",
+        isSingleCenteredStep ? "flex justify-center" : "grid grid-cols-2 gap-3",
+        className
+      )}
+    >
+      {children}
+    </div>
+  );
 };
 
 export const PreviousButton = ({
@@ -84,32 +108,15 @@ export const PreviousButton = ({
   return (
     <Button
       type="button"
-      variant="outline"
+      variant="brandOutline"
       onClick={prevStep}
-      className={cn("gap-2", className)}
+      className={cn("w-full justify-center gap-2", className)}
       {...props}
     >
       {children}
     </Button>
   );
 };
-
-/* export const NextButton = ({ children, className, ...props }: ButtonProps) => {
-  const { nextStep, isLastStep, isFirstStep } = useMultiStepViewer();
-
-  if (isLastStep) return null;
-
-  return (
-    <Button
-      type="button"
-      onClick={nextStep}
-      className={cn("gap-2", className)}
-      {...props}
-    >
-      {children}
-    </Button>
-  );
-}; */
 
 export const NextButton = ({
   children,
@@ -126,9 +133,10 @@ export const NextButton = ({
   return (
     <Button
       type="button"
+      variant="brand"
       onClick={nextStep}
       className={cn(
-        "gap-2",
+        "w-full justify-center gap-2",
         isFirstStep && "mx-auto", // İlk adımda ortala
         className
       )}
@@ -149,7 +157,12 @@ export const SubmitButton = ({
   if (!isLastStep) return null;
 
   return (
-    <Button type="submit" className={cn("gap-2", className)} {...props}>
+    <Button
+      type="submit"
+      variant="brand"
+      className={cn("w-full justify-center gap-2", className)}
+      {...props}
+    >
       {children}
     </Button>
   );

@@ -1,9 +1,9 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+  @import "tailwindcss";
+  @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+  @custom-variant dark (&:is(.dark *));
 
-@theme inline {
+  @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -40,6 +40,8 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --color-brand: #ccb36e;
+  --color-brand-foreground: #ffffff;
 }
 
 :root {

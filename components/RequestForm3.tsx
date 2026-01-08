@@ -364,15 +364,23 @@ export default function RequestForm3() {
               </div>
 
               <FormFooter>
-                <PreviousButton>
-                  <ChevronLeft className="w-4 h-4" /> Geri
+                <PreviousButton className="w-full justify-center gap-2">
+                  <ChevronLeft className="w-4 h-4" />
+                  Geri
                 </PreviousButton>
 
-                <NextButton hideOnSteps={[1]}>
-                  İleri <ChevronRight className="w-4 h-4" />
+                <NextButton
+                  hideOnSteps={[1]}
+                  className="w-full justify-center gap-2"
+                >
+                  İleri
+                  <ChevronRight className="w-4 h-4" />
                 </NextButton>
 
-                <SubmitButton disabled={submitMutation.isPending}>
+                <SubmitButton
+                  disabled={submitMutation.isPending}
+                  className="w-full justify-center gap-2"
+                >
                   {submitMutation.isPending
                     ? "Gönderiliyor..."
                     : "Talebi Gönder"}

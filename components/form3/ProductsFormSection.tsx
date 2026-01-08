@@ -12,6 +12,10 @@ import { FormSectionHeader } from "@/components/form3/form-section/FormSectionHe
 import { ScrollSpyNavigation } from "@/components/ui/scroll-spy-navigation";
 import { Input } from "@/components/ui/input";
 
+import { useMultiStepViewer } from "@/hooks/use-multi-step-viewer";
+import { PreviousButton, NextButton } from "@/components/multi-step-viewer";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+
 export const ProductsFormSection = ({
   form,
   groups,
@@ -145,6 +149,18 @@ export const ProductsFormSection = ({
               title="Ürün Seçimi"
               description="İlgili üretim grubundan ürün seçiniz. Birden fazla ürün seçebilirsiniz."
             />
+            {/* STEP NAVIGATION (HEADER ALTINDA) */}
+            <div className="mt-4 grid grid-cols-2 gap-3 w-full">
+              <PreviousButton className="w-full justify-center gap-2">
+                <ChevronLeft className="w-4 h-4" />
+                Geri
+              </PreviousButton>
+
+              <NextButton className="w-full justify-center gap-2">
+                İleri
+                <ChevronRight className="w-4 h-4" />
+              </NextButton>
+            </div>
           </div>
 
           <ScrollSpyNavigation
